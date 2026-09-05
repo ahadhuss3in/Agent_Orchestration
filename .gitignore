@@ -12,3 +12,4 @@ docs/
 DATA/
 ProcessedData/
 CLAUDE.md
+.claude/

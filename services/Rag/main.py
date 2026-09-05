@@ -68,8 +68,6 @@ def query(request: QueryRequest):
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
-        # NOTE: guardrails (NeMo Rails) intentionally skipped for now,
-        # app/guardrails.py doesn't exist yet, add this gate back once it does
         final_output = rag_agent.invoke(initial_state, config=config)
 
         return {

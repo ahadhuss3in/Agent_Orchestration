@@ -34,8 +34,15 @@ def saved_prog_local(data:dict, sourcetype:str, filename:str) -> str:
         json.dump(data,f,ensure_ascii=False, indent=2)
     return dest 
 
-def process_file(file_path:str, filename:str, sourcetype:str):
-    """parse -> chunk -> save local -> embedd -> index in db"""
+def process_file(file_path:str, filename:str, sourcetype:str, seed_id:str=None, entity_id:str=None):
+    """parse -> chunk -> save local -> embedd -> index in db
+
+    seed_id/entity_id are optional. Leave them None for normal enterprise
+    ingestion, nothing changes. Set seed_id to tag every chunk from this
+    file as belonging to one governance/simulation scenario, and entity_id
+    on top of that to say a chunk is one specific agent's own private
+    material rather than something every agent in that seed can see.
+    """
     with logfire.span("Processing File", file=filename, sourcetype=str):
         try:
             ext= filename.lower().rsplit(".",1)[-1]
@@ -89,6 +96,11 @@ def process_file(file_path:str, filename:str, sourcetype:str):
                             ## or next index
                             "chunk_index": i,
                             "chunk_count": len(chunks),
+                            ## which governance/simulation scenario this chunk belongs to,
+                            ## and which single agent's own material it is, if any.
+                            ## both stay None for normal enterprise ingestion.
+                            "seed_id": seed_id,
+                            "entity_id": entity_id,
                         },
                     )
 
@@ -110,7 +122,7 @@ def process_file(file_path:str, filename:str, sourcetype:str):
             )
         
 ## found dir and paths -> scan for files in these dir and folders
-def process_dir(dir_path:str, sourcetype:str):
+def process_dir(dir_path:str, sourcetype:str, seed_id:str=None, entity_id:str=None):
     """Process every file inside one directory, under one sourcetype."""
     with logfire.span("Scanning directory",path=dir_path,sourcetype=sourcetype):
         files=[f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path,f))]
@@ -118,11 +130,11 @@ def process_dir(dir_path:str, sourcetype:str):
 
         for filename in files:
             file_path = os.path.join(dir_path, filename)
-            process_file(file_path, filename, sourcetype)
+            process_file(file_path, filename, sourcetype, seed_id=seed_id, entity_id=entity_id)
 
 
 ## find the folder paths and dir paths
-def run_all_ingestion(base_dir:str, explicit_source_type:str = None, wipe:bool=False):
+def run_all_ingestion(base_dir:str, explicit_source_type:str = None, wipe:bool=False, seed_id:str=None, entity_id:str=None):
     """
     scane the dir, map sub folder to source rypes and ingest all avail documents.
     pass --wipe to drop and recreate the qdrant collection b4 ingestion
@@ -161,10 +173,10 @@ def run_all_ingestion(base_dir:str, explicit_source_type:str = None, wipe:bool=F
                 else "noisy" if "noisy" in basename
                 else "general"
             )
-        process_dir(base_dir, sourcetype)
+        process_dir(base_dir, sourcetype, seed_id=seed_id, entity_id=entity_id)
     else:
         for sub in subdirs:
-            process_dir(os.path.join(base_dir, sub), sub)
+            process_dir(os.path.join(base_dir, sub), sub, seed_id=seed_id, entity_id=entity_id)
 
 
 if __name__ == "__main__":
