@@ -13,3 +13,9 @@ class OrchestrationState(TypedDict):
     # for seed_type == "real". stays an empty list for fictional seeds,
     # the fetch_context node never even runs for those.
     fetched_context: List[dict]
+    # everything extract_entities produces. entities/relationships are
+    # candidates only, nothing here becomes an agent until a human picks
+    # from this list at M17.
+    candidate_entities: List[dict]
+    relationships: List[dict]
+    qualitative_briefing: dict
