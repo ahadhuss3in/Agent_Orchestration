@@ -1,4 +1,4 @@
-from typing import TypedDict, Literal, List
+from typing import TypedDict, Literal, List, Dict
 
 
 class OrchestrationState(TypedDict):
@@ -19,3 +19,8 @@ class OrchestrationState(TypedDict):
     candidate_entities: List[dict]
     relationships: List[dict]
     qualitative_briefing: dict
+    # M17: the entity_ids a human chose out of candidate_entities. Set by
+    # resuming the graph's interrupt with this list.
+    selected_agent_ids: List[str]
+    # one AgentProfile per selected_agent_id, keyed by agent_id (== entity_id).
+    agents: Dict[str, dict]

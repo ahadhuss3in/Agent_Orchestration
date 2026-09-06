@@ -20,6 +20,7 @@ dependencies = [
     "logfire[fastapi,requests]>=4.41.0",
     "loguru>=0.7.3",
     "mcp>=2.1.1",
+    "neo4j>=6.3.0",
     "numpy>=2.5.2",
     "pdfplumber>=0.11.10",
     "pydantic>=2.13.4",
