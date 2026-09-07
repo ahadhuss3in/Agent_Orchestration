@@ -21,11 +21,21 @@ const FOOTER_LINKS = [
 
 export function CtaFooter() {
   return (
-    <footer id="page-footer" className="sec-recap sec-seam relative">
+    <footer id="page-footer" className="sec-recap relative">
+      {/* The 3px Spectrum bar that used to sit here is gone. It was a literal
+          line drawn exactly on the FAQ/footer boundary — sampled at 1440x900
+          it measured 356 summed RGB against a 60-ish surround, by a wide
+          margin the most visible join on the page, and no amount of
+          background blending underneath it was ever going to hide a rule that
+          was deliberately there. The Spectrum still opens the footer, in the
+          particle wordmark immediately below and in the wash behind it.
+
+          This is the last wash on the page, so it does not ramp away at its
+          bottom edge — there is nothing under it to hand over to. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
-        style={{ background: "var(--grad-recap)" }}
+        className="sec-wash sec-wash-last"
+        style={{ "--wash-x": "50%", "--wash-y": "18%" } as React.CSSProperties}
       />
 
       <div className="mx-auto w-full max-w-[1440px] px-6 pt-20 sm:px-8 lg:px-14 lg:pt-28">

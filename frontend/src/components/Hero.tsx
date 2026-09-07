@@ -277,13 +277,13 @@ export function Hero() {
     <section
       id="top"
       ref={root}
-      className="sec-seed sec-seam relative flex min-h-dvh items-center overflow-hidden pt-24 pb-20 lg:pt-16"
+      className="sec-seed sec-open relative flex min-h-dvh items-center pt-24 pb-20 lg:pt-16"
     >
       <div
         aria-hidden="true"
         className="grid-field pointer-events-none absolute inset-0"
       />
-      <div aria-hidden="true" className="sec-wash" />
+      <div aria-hidden="true" className="sec-wash sec-wash-first" />
 
       {/* ---------------- the load-in ---------------- */}
       {/* Motion-only: hidden by default in CSS, revealed by the `js-motion`

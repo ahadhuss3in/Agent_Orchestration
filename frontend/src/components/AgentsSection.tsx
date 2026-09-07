@@ -521,7 +521,7 @@ export function AgentsSection() {
       id="agents"
       ref={root}
       aria-labelledby="agents-heading"
-      className="sec-agents sec-seam relative overflow-hidden py-24 lg:py-36"
+      className="sec-agents sec-open relative py-24 lg:py-36"
     >
       {/* The borrowed face. Scoped to this section and nowhere else on the
           page. Purely atmospheric, so `aria-hidden` and an empty alt: what the

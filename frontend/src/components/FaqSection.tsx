@@ -156,7 +156,7 @@ export function FaqSection() {
       id="faq"
       ref={root}
       aria-labelledby="faq-heading"
-      className="sec-chat sec-seam relative overflow-hidden py-24 lg:py-32"
+      className="sec-chat sec-open relative py-24 lg:py-32"
     >
       <div
         aria-hidden="true"

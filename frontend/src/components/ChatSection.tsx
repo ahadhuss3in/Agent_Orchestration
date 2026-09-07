@@ -64,7 +64,7 @@ export function ChatSection() {
       id="chat"
       ref={root}
       aria-labelledby="chat-heading"
-      className="sec-chat sec-seam relative overflow-hidden py-24 lg:py-36"
+      className="sec-chat sec-open relative py-24 lg:py-36"
     >
       <div
         aria-hidden="true"

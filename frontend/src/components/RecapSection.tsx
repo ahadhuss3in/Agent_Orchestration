@@ -78,7 +78,7 @@ export function RecapSection() {
       id="recap"
       ref={root}
       aria-labelledby="recap-heading"
-      className="sec-recap sec-seam relative overflow-hidden py-24 lg:py-32"
+      className="sec-recap sec-open relative py-24 lg:py-32"
     >
       {/* The one section that never had a wash, which is why the run from
           Chat through Recap into the FAQ used to read colour, black, colour.
