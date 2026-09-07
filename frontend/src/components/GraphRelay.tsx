@@ -135,7 +135,7 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
         }
 
         // ---------------- wide + motion ----------------
-        gsap.set(orchSigil, { opacity: 0, scale: 0.55, transformOrigin: "50% 50%" });
+        gsap.set(orchSigil, { opacity: 0, scale: 1, transformOrigin: "50% 50%" });
         gsap.set(strokes, { strokeDashoffset: 1 });
         gsap.set(joints, { opacity: 0 });
         gsap.set(flyer, {
@@ -217,24 +217,49 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
 
           // ---- WRITES ----
           const fade = smoothstep(clamp01((p - 0.86) / 0.14));
-          const visible = p > 0.005 ? 1 : 0;
+          // THE DETACH IS A CROSSFADE, NOT A SWITCH.
+          //
+          // v1 snapped the flyer to opacity 1 the first frame past p = 0 while
+          // the graph's node was still at 1, which put two copies of the same
+          // sigil on the same pixels at full strength — and because each `Orb`
+          // runs its own idle rotation at its own phase, the two rings beat
+          // against each other and the node visibly doubled for a frame.
+          //
+          // Complementary opacities over the same short window instead, which
+          // is exactly what the Seed -> Graph leg does at its own handover.
+          // The two are the same drawing at the same coordinate and the same
+          // size, so at any point in the ramp they read as one object getting
+          // no brighter and no dimmer — and because `entry` also drives the
+          // node's dim, the sigil looks like it is lifting OUT of the graph
+          // rather than appearing next to it.
+          const entry = smoothstep(clamp01((p - 0.02) / 0.1));
 
-          gsap.set(flyer, { x, y, scale, opacity: visible * (1 - fade) });
+          gsap.set(flyer, { x, y, scale, opacity: entry * (1 - fade) });
           // The flyer swells slightly as it lands, then settles — the same
           // "gulp" pulse the first leg uses, on the inner wrapper so it never
           // fights the transform `place()` owns on the outer one.
           gsap.set(flyerInner, { scale: 1 + 0.1 * (4 * land * (1 - land)) });
 
-          // The vacated node. Not taken to zero: the graph's edges all run to
+          // The vacated node. Its opacity rides `entry` so it hands over to
+          // the flyer on the same short ramp; its scale rides `detach`, which
+          // is slower, so the socket keeps shrinking for a while after the
+          // sigil has left. Not taken to zero: the graph's edges all run to
           // this point and an empty junction reads as a rendering fault, where
           // a dim socket reads as somewhere something used to be.
           gsap.set(graphOrb, {
-            opacity: lerp(1, 0.32, detach),
+            opacity: lerp(1, 0.32, entry),
             scale: lerp(1, 0.62, detach),
             transformOrigin: "50% 50%",
           });
 
-          gsap.set(orchSigil, { opacity: fade, scale: lerp(0.55, 1, fade) });
+          // Opacity only. The destination deliberately does NOT scale up into
+          // place: the flyer is already sized to this element's layout width,
+          // so holding it at scale 1 makes the two pixel-identical for the
+          // whole crossfade. Scaling it would mean the incoming copy was a
+          // different size from the outgoing one at every frame of the swap,
+          // which is the one thing that gives the trick away. The arrival
+          // still has a settle — `flyerInner` pulses through the landing.
+          gsap.set(orchSigil, { opacity: fade });
 
           // The figure assembles under the arriving sigil.
           if (!drawn) {

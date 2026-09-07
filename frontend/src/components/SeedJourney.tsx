@@ -400,7 +400,18 @@ export function SeedJourney() {
           const visible = entry > 0.02 ? 1 : 0;
 
           gsap.set(flyer, { x, y, scale, opacity: visible * (1 - fadeT) });
-          gsap.set(graphOrb, { opacity: fadeT });
+          // `< 1` rather than unconditional. Once this leg has fully handed
+          // over, the graph orb belongs to `GraphRelay`, whose own driver
+          // starts at exactly the scroll position this one ends at — and which
+          // immediately begins dimming the orb to a socket as the sigil
+          // detaches for leg two. Both drivers scrub with a 0.5s lag, so for
+          // about half a second of scrolling they overlap: this one is pinned
+          // at fadeT = 1 and kept re-asserting opacity 1 on every settling
+          // frame, which fought the relay's dim and left the node flickering
+          // back to full while the sigil was already leaving it. Whichever
+          // wrote last won, which is not a thing to leave to tick order.
+          // Scrolling back up drops fadeT below 1 and control returns here.
+          if (fadeT < 1) gsap.set(graphOrb, { opacity: fadeT });
           // The pulse lands on the inner wrapper so it cannot fight the outer
           // element's transform, which `place()` owns.
           gsap.set(flyerInner, { scale: 1 + 0.16 * peak });
