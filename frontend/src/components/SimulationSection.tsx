@@ -199,11 +199,18 @@ export function SimulationSection() {
         <div className="mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-14">
           <div className="mx-auto w-full max-w-[860px]">
             <div className="mb-5 flex items-center justify-between gap-4 border-b border-line pb-3">
+              {/* THE LINEAGE, third beat. This dot used to be Pulse green
+                  like everything else in this section, which made it read as
+                  one more piece of section furniture. It is the thing that
+                  says a turn is live, and what is taking those turns came out
+                  of the seed — so it wears Ignition and pulses in Ignition,
+                  the same pair as the sigil's gem and the mark on the
+                  Orchestrator's staff. The section keeps its own colour
+                  everywhere else; this is the one point of continuity in it. */}
               <span className="hud-label flex items-center gap-2 text-ink-dim">
                 <span
                   aria-hidden="true"
-                  className="live-dot ambient inline-block h-1.5 w-1.5 rounded-full"
-                  style={{ background: "var(--grad-sim-a)" }}
+                  className="lineage-dot live-dot ambient inline-block h-1.5 w-1.5 rounded-full"
                 />
                 SIMULATION LOOP / EXAMPLE
               </span>
@@ -231,10 +238,11 @@ export function SimulationSection() {
                       <span className="hud-label" style={{ color: ACCENT[l.accent] }}>
                         {l.speaker.replace(/^The /, "").toUpperCase()}
                       </span>
+                      {/* Same mark, per speaking turn: the agent currently
+                          holding the floor is carrying the seed. */}
                       <span
                         aria-hidden="true"
-                        className="sim-cursor live-dot ambient inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ background: "var(--grad-sim-a)" }}
+                        className="sim-cursor lineage-dot live-dot ambient inline-block h-1.5 w-1.5 shrink-0 rounded-full"
                       />
                       <span className="hud-label ml-auto text-ink-dim tabular-nums">
                         {String(i + 1).padStart(2, "0")}

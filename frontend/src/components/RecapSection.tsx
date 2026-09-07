@@ -6,6 +6,7 @@ import { baseReveal } from "@/lib/reveal";
 import { bodyLineReveal, countIn } from "@/lib/textAnim";
 import { PIPELINE } from "@/lib/content";
 import { spectrumAt } from "@/lib/spectrum";
+import { SeedCore } from "./SeedCore";
 
 /**
  * The accessible spine of the page.
@@ -82,11 +83,11 @@ export function RecapSection() {
     >
       {/* The one section that never had a wash, which is why the run from
           Chat through Recap into the FAQ used to read colour, black, colour.
-          It picks up the same #ff6a3d -> #2f6bff pair its seam bands and its
-          step cards already use, which is also the pair the FAQ's own --ga
-          continues from: the blue leaving the bottom of this section and the
-          blue arriving at the top of the FAQ are literally the same value, so
-          that particular boundary now has no visible join at all. */}
+          It picks up the same #ff6a3d -> #2f6bff pair its step cards already
+          use, which is also the pair the FAQ's own --ga continues from, so the
+          blue leaving the bottom of this section and the blue arriving at the
+          top of the FAQ are literally the same value — the one boundary on the
+          page whose crossfade has nothing to crossfade. */}
       <div
         aria-hidden="true"
         className="sec-wash"
@@ -128,6 +129,19 @@ export function RecapSection() {
                 style={{ "--ga": a, "--gb": b } as React.CSSProperties}
               >
                 <div className="flex items-baseline gap-3">
+                  {/* THE LINEAGE, on the step it actually names. Step 01 is
+                      "Seed", and `spectrumAt(0)` is #ff6a3d, which is
+                      --grad-seed-a — so this card's own accent is already the
+                      sigil's colour and the mark costs nothing to reconcile.
+                      Only here: putting one on all seven would make it a
+                      bullet rather than a throughline. */}
+                  {i === 0 && (
+                    <SeedCore
+                      uid="recap"
+                      ring={false}
+                      className="h-[15px] w-[15px] shrink-0 translate-y-[2px]"
+                    />
+                  )}
                   {/* The numeral is real text at 7.3:1 on the panel rather
                       than small type dropped onto a saturated fill. The rule
                       survives the retheme: two of the Spectrum stops still

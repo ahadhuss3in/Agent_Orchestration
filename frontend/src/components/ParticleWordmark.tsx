@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
 import { spectrumAt } from "@/lib/spectrum";
+import { SeedCore } from "./SeedCore";
 
 /**
  * Grid sizes tried in order, in canvas pixels. Sampling starts dense and
@@ -39,8 +40,24 @@ const MAX_DOTS = 600;
  * (no 2D context, font never resolves, zero-width container) the text simply
  * stays visible and nothing else happens.
  *
- * Reduced motion: no canvas work is done at all and no dot is created. The
- * styled text is the whole feature.
+ * THE LINEAGE, closing beat. v1 scattered the dots at random points across
+ * the box and pulled them into the letters, which looked fine and meant
+ * nothing. They now come out of the seed: a `SeedCore` sits at the centre of
+ * the box, every dot starts inside it in a tight cluster, and the formation is
+ * the core flying apart into the letters of the product's own name. The page
+ * therefore reads end to end as one object — a sentence you typed becomes a
+ * sigil, the sigil becomes a graph, the graph becomes the Orchestrator, the
+ * Orchestrator splits into the cast, and what is left of it finally spells
+ * PANTHEON.
+ *
+ * The mechanic itself is untouched: same canvas sampling, same adaptive grid,
+ * same per-dot jitter, same Spectrum colouring across the word. Only the START
+ * positions changed, plus one fade on the core. Clustering is also strictly
+ * safer than the old scatter — every dot begins within a few px of the centre,
+ * so there is no way for a start position to sit outside the box.
+ *
+ * Reduced motion: no canvas work is done at all, no dot is created, and the
+ * core is `display: none` in CSS. The styled text is the whole feature.
  */
 export function ParticleWordmark() {
   const root = useRef<HTMLDivElement>(null);
@@ -64,6 +81,7 @@ export function ParticleWordmark() {
 
         const layer = s.querySelector<HTMLElement>(".pw-dots");
         const fallback = s.querySelector<HTMLElement>(".pw-fallback");
+        const core = s.querySelector<HTMLElement>(".pw-seed");
         if (!layer || !fallback) return;
 
         let ro: ResizeObserver | null = null;
@@ -155,21 +173,35 @@ export function ParticleWordmark() {
         };
 
         /**
-         * Scatter start positions are picked as absolute points inside the
-         * container and then expressed as an offset from each dot's target,
-         * rather than as a free-floating random offset. Same look, but every
-         * dot is guaranteed to start inside the box: an unbounded offset put
-         * dots up to 500px past the right edge, which showed up as real
-         * horizontal overflow at 1440 in the scroll check.
+         * Every dot starts inside the seed core.
+         *
+         * Positions are still expressed as an OFFSET from each dot's own
+         * target rather than as an absolute point, which is what keeps the
+         * formation tween a plain `x: 0, y: 0`. The cluster is a disc of the
+         * core's own radius, sampled by sqrt so the points are evenly spread
+         * over the area instead of piling up in the middle, and jittered
+         * outward slightly so the mass has a soft edge.
+         *
+         * This is also strictly safer than the random scatter it replaces:
+         * the old version picked points across the whole box and an earlier
+         * unbounded version of it put dots 500px past the right edge, which
+         * measured as real horizontal overflow at 1440. Nothing can start
+         * outside a disc a few dozen px wide at the centre.
          */
         const scatter = () => {
           const rect = s.getBoundingClientRect();
+          const cx = rect.width / 2;
+          const cy = rect.height / 2;
+          const spread = (core?.getBoundingClientRect().width ?? 64) * 0.42;
+          const at = () => {
+            const a = gsap.utils.random(0, Math.PI * 2);
+            const r = Math.sqrt(gsap.utils.random(0, 1)) * spread;
+            return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
+          };
           gsap.set(dots, {
-            x: (_i: number, el: HTMLElement) =>
-              gsap.utils.random(4, rect.width - 4) - parseFloat(el.style.left),
-            y: (_i: number, el: HTMLElement) =>
-              gsap.utils.random(4, rect.height - 4) - parseFloat(el.style.top),
-            scale: () => gsap.utils.random(0.4, 1.3),
+            x: (_i: number, el: HTMLElement) => at().x - parseFloat(el.style.left),
+            y: (_i: number, el: HTMLElement) => at().y - parseFloat(el.style.top),
+            scale: () => gsap.utils.random(0.2, 0.6),
             opacity: 0,
           });
         };
@@ -187,14 +219,29 @@ export function ParticleWordmark() {
             delay: () => gsap.utils.random(0, 0.5),
             ease: "power3.out",
           });
+          // The core goes as the dots leave it, swelling slightly on the way
+          // out so it reads as coming apart rather than as switching off. It
+          // is gone well before the last dot lands.
+          if (core) {
+            gsap.to(core, {
+              opacity: 0,
+              scale: 1.5,
+              duration: 0.75,
+              ease: "power2.out",
+            });
+          }
           gsap.to(fallback, { opacity: 0, duration: 0.6, delay: 0.25 });
         };
 
         if (!build()) return;
 
-        // The word is hidden only once we know we actually have dots to
-        // replace it with.
+        // The word is hidden — and the core shown — only once we know we
+        // actually have dots to replace it with. A failed canvas trace leaves
+        // the styled text alone and never puts a lone gem on top of it.
         gsap.set(fallback, { opacity: 1 });
+        if (core) {
+          gsap.set(core, { opacity: 1, scale: 1, transformOrigin: "50% 50%" });
+        }
         scatter();
 
         trigger = ScrollTrigger.create({
@@ -226,6 +273,10 @@ export function ParticleWordmark() {
           gsap.killTweensOf(dots);
           layer.replaceChildren();
           gsap.set(fallback, { opacity: 1, clearProps: "opacity" });
+          if (core) {
+            gsap.killTweensOf(core);
+            gsap.set(core, { clearProps: "opacity,transform" });
+          }
         };
       });
     };
@@ -254,6 +305,15 @@ export function ParticleWordmark() {
       className="relative mx-auto h-[26vw] max-h-[220px] min-h-[92px] w-full max-w-[1000px]"
     >
       <div aria-hidden="true" className="pw-dots absolute inset-0" />
+      {/* The seed, one last time, at the point every dot comes out of.
+          Centred on the box because that is where `scatter()` clusters, so
+          the two never have to agree on a number. */}
+      <span
+        aria-hidden="true"
+        className="pw-seed absolute left-1/2 top-1/2 block w-[54px] -translate-x-1/2 -translate-y-1/2 sm:w-[64px]"
+      >
+        <SeedCore uid="wordmark" className="h-auto w-full" />
+      </span>
       <p className="pw-fallback display absolute inset-0 flex items-center justify-center text-[11vw] leading-none text-ink sm:text-[9vw] lg:text-[clamp(3rem,8vw,7rem)]">
         PANTHEON
       </p>

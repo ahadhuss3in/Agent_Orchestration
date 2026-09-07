@@ -8,6 +8,8 @@ import { assemble, bodyLineReveal, gesture, typeChars } from "@/lib/textAnim";
 import { ARCHETYPES, ORCHESTRATOR } from "@/lib/content";
 import { FIGURES } from "@/lib/figures";
 import { InlineFigure } from "./WireframeFigures";
+import { SeedCore } from "./SeedCore";
+import { LINEAGE_ARRIVED } from "./GraphRelay";
 
 /**
  * The four archetype cards. Named COUNCIL through v3, when this section still
@@ -336,8 +338,25 @@ export function AgentsSection() {
           gsap.set(shards, { opacity: 0, xPercent: -50, yPercent: -50 });
           gsap.set(webEdges, { strokeDashoffset: 1 });
 
+          // BUILT PAUSED, FIRED BY WHICHEVER COMES FIRST.
+          //
+          // v4 started this on its own ScrollTrigger at `orch top 62%`, which
+          // was a fine cue when the Orchestrator simply appeared. It is the
+          // wrong cue now: the seed sigil arrives on the staff at the end of
+          // `GraphRelay`'s scrub, and the split has to read as the consequence
+          // of that arrival, not as a separate thing that starts nearby. So
+          // the relay says when, by dispatching `LINEAGE_ARRIVED` on this
+          // section the frame it lands.
+          //
+          // The ScrollTrigger below stays as the floor, because the relay does
+          // not exist on every branch — under 1024px there is no flyer at all,
+          // and a mitosis that only ever fired on an event would simply never
+          // run there. `fire()` is idempotent, so whichever arrives first wins
+          // and the other is a no-op. Its start moved from 62% to 38% so that
+          // on the branches where BOTH exist the arrival is comfortably first
+          // and the fallback never actually fires.
           const tl = gsap.timeline({
-            scrollTrigger: { trigger: orch, start: "top 62%", once: true },
+            paused: true,
             defaults: { ease: "power2.out" },
           });
 
@@ -472,6 +491,25 @@ export function AgentsSection() {
           tl.eventCallback("onComplete", () => {
             hatched = true;
             sync();
+          });
+
+          let fired = false;
+          const fire = () => {
+            if (fired) return;
+            fired = true;
+            tl.play();
+          };
+          s.addEventListener(LINEAGE_ARRIVED, fire);
+          const gate = ScrollTrigger.create({
+            trigger: orch,
+            start: "top 38%",
+            once: true,
+            onEnter: fire,
+          });
+          cleanups.push(() => {
+            s.removeEventListener(LINEAGE_ARRIVED, fire);
+            gate.kill();
+            tl.kill();
           });
         } else {
           // No layer measured (shouldn't happen, but never leave the cast
@@ -650,13 +688,33 @@ export function AgentsSection() {
                 {/* Rendered inline rather than through the sprite so the staff
                     arm is an addressable element the summon beat can lift.
                     Aurum stays on the Zeus figure — the mythic thread. */}
-                <div className="orchestrator-figure shrink-0">
+                <div className="orchestrator-figure relative shrink-0">
                   <InlineFigure
                     id="orchestrator"
                     className="h-[190px] w-auto text-[color:var(--ink-aurum)] sm:h-[210px]"
                     strokeClass="orch-stroke"
                     jointClass="orch-joint"
                   />
+                  {/* WHERE THE SEED LANDS.
+
+                      The Orchestrator's geometry already has a joint at
+                      (98, 12) — the orb at the top of the staff — and this
+                      sits exactly on it: 98/120 across and 12/210 down the
+                      figure's own viewBox, so the two stay registered at
+                      every breakpoint without a magic pixel offset. Sizing it
+                      here rather than in the controller means `GraphRelay`
+                      never has to know how big the sigil should be; it reads
+                      this element's live rect and matches it.
+
+                      Visible by default. `GraphRelay` hides it and crossfades
+                      it in only on the branch where a flyer actually travels;
+                      narrow and reduced-motion get it as a plain mark. */}
+                  <span
+                    aria-hidden="true"
+                    className="orch-sigil pointer-events-none absolute left-[81.6%] top-[5.7%] block w-[46px] -translate-x-1/2 -translate-y-1/2 sm:w-[50px]"
+                  >
+                    <SeedCore uid="orch" className="h-auto w-full" />
+                  </span>
                 </div>
                 <div>
                   {/* Was "ARCHETYPE / PRIMARY", which put the Orchestrator at

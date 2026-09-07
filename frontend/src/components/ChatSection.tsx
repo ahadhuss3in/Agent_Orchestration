@@ -7,6 +7,7 @@ import { blurFocus, bodyLineReveal } from "@/lib/textAnim";
 import { useInViewClass } from "@/lib/useInViewClass";
 import { CHAT_MOCK } from "@/lib/content";
 import { Figure } from "./WireframeFigures";
+import { SeedCore } from "./SeedCore";
 
 /**
  * Not pinned. A static, clearly-labelled mock of the post-simulation 1:1
@@ -101,10 +102,33 @@ export function ChatSection() {
             <div className="panel panel-glow panel-topline bracketed p-5 sm:p-7">
               {/* panel header */}
               <div className="flex items-center gap-4 border-b border-line pb-4">
-                <Figure
-                  id="skeptic"
-                  className="h-[68px] w-auto shrink-0 text-[color:var(--ink-wire)]"
-                />
+                {/* THE LINEAGE, fourth beat.
+
+                    The avatar stays the same line-art figure in the same Wire
+                    blue this section owns — what changes is that it is
+                    visibly carrying the seed. The core sits at (55, 80) in the
+                    Skeptic's own viewBox, which is the middle of the torso
+                    stroke `M55 58 L55 124`, so it reads as inside the figure
+                    rather than pinned on top of it: 50% across, 38% down.
+
+                    Same object as the gem in the traveling sigil and the mark
+                    on the Orchestrator's staff, at the size this panel can
+                    carry. The point of the section is that the agent you are
+                    talking to is the one that ran the rounds; the point of the
+                    mark is that it goes all the way back to the sentence you
+                    typed. No ring at this size — the dashes fill in. */}
+                <span className="relative inline-block shrink-0">
+                  <Figure
+                    id="skeptic"
+                    className="h-[68px] w-auto text-[color:var(--ink-wire)]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-[38%] block w-[15px] -translate-x-1/2 -translate-y-1/2"
+                  >
+                    <SeedCore uid="chat" ring={false} className="h-auto w-full" />
+                  </span>
+                </span>
                 <div className="min-w-0">
                   <p className="display-sm text-base text-ink">The Skeptic</p>
                   <p className="hud-label mt-1.5 text-ink-dim">POST-RUN SESSION</p>

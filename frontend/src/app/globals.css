@@ -981,11 +981,68 @@ html.js-motion .hero-block {
   stroke-width: 1.1;
 }
 
-/* The traveling seed is a desktop-motion-only device. It is created
-   hidden and only revealed by the journey timeline. */
-.seed-flyer {
+/* ------------------------------------------------------------
+   THE LINEAGE — one seed, followed the whole way down.
+
+   `.seed-flyer` carries the sigil hero -> Seed -> Graph, `.relay-flyer`
+   carries it Graph -> Orchestrator. Both are desktop-motion-only devices,
+   both are created hidden and revealed by their own scrubbed driver, and
+   neither pins anything.
+   ------------------------------------------------------------ */
+
+.seed-flyer,
+.relay-flyer {
   opacity: 0;
   visibility: hidden;
+}
+
+/* Where the sigil comes to rest on the Orchestrator's staff. Its own drop
+   shadow rather than a border, so it reads as light being held rather than as
+   a badge stuck on the figure. */
+.orch-sigil {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--grad-seed-a) 55%, transparent));
+  will-change: transform, opacity;
+}
+
+/* THE MARK, at sizes too small for a whole sigil.
+
+   Past the Agents section the throughline stops being a set piece and becomes
+   an identity: the pulsing turn indicator in Simulation, the core inside the
+   agent you talk to in Chat, the point the wordmark's dots fly out of in the
+   footer. All three wear Ignition — the seed's own pair — regardless of which
+   section's --ga / --gb they happen to be sitting in, exactly like the gem
+   inside `Orb`. The section keeps its colour; the lineage keeps its own, which
+   is what makes it legible as one continuous thing rather than as decoration
+   that happens to be there.
+
+   These are decorative marks beside real labelled text, never the sole carrier
+   of any state, so nothing here has a contrast requirement of its own. */
+.lineage-dot {
+  background: linear-gradient(140deg, var(--grad-seed-a), var(--grad-seed-b));
+}
+
+@keyframes lineage-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--grad-seed-a) 60%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--grad-seed-a) 0%, transparent);
+  }
+}
+
+/* Overrides `.live-dot`'s animation-name only; the timing, easing and the
+   `.ambient` play-state gate are all still the shared ones. */
+.lineage-dot.live-dot {
+  animation-name: lineage-pulse;
+}
+
+/* The core the wordmark's dots come out of. Hidden until the sampler has
+   actually produced dots to replace the word with — if the canvas trace fails
+   for any reason the styled text stays and this never appears. */
+.pw-seed {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------
@@ -1013,14 +1070,27 @@ html.js-motion .hero-block {
     display: none !important;
   }
 
-  /* No fixed traveling orb, no mitosis shards, no particle field. */
+  /* No fixed traveling orb on either leg of the journey, no mitosis shards,
+     no particle field, and no seed core waiting to dissolve into a particle
+     field that is never built. */
   .seed-flyer,
+  .relay-flyer,
   .mitosis-layer,
-  .pw-dots {
+  .pw-dots,
+  .pw-seed {
     display: none !important;
   }
 
-  /* Anything a timeline would have revealed stays at its final state. */
+  /* Anything a timeline would have revealed stays at its final state. The
+     Orchestrator's strokes and the sigil on its staff are in here because the
+     Graph -> Orchestrator handoff draws them in on a scrub: with no scrub they
+     have to be simply present, which is the whole reduced-motion equivalent of
+     that beat — the graph keeps its node, the Orchestrator is already holding
+     the seed, nothing travels. */
+  .orch-stroke,
+  .orch-joint,
+  .orch-sigil,
+  .graph-center-orb,
   .reveal-target,
   .hero-block,
   .seed-line,
@@ -1043,7 +1113,8 @@ html.js-motion .hero-block {
   }
 
   .edge-path,
-  .agents-edge {
+  .agents-edge,
+  .orch-stroke {
     stroke-dashoffset: 0 !important;
   }
 

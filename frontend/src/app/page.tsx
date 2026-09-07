@@ -3,6 +3,7 @@ import { HudRail } from "@/components/HudRail";
 import { ScrollRefresh } from "@/components/ScrollRefresh";
 import { Hero } from "@/components/Hero";
 import { SeedJourney } from "@/components/SeedJourney";
+import { GraphRelay } from "@/components/GraphRelay";
 import { AgentsSection } from "@/components/AgentsSection";
 import { SimulationSection } from "@/components/SimulationSection";
 import { ChatSection } from "@/components/ChatSection";
@@ -32,7 +33,14 @@ export default function Page() {
             so a single client wrapper owns both and the master ScrollTrigger
             that spans them. */}
         <SeedJourney />
-        <AgentsSection />
+        {/* Leg two of the same journey. `GraphRelay` wraps Agents rather than
+            sitting beside it so it has a scope to find the Orchestrator in;
+            the graph's central node, the one thing it needs from outside its
+            own subtree, it looks up by class. See the note in the file for
+            why this is not simply more of `SeedJourney`. */}
+        <GraphRelay>
+          <AgentsSection />
+        </GraphRelay>
         <SimulationSection />
         <ChatSection />
         <RecapSection />
