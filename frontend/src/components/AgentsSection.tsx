@@ -5,15 +5,35 @@ import Image from "next/image";
 import { gsap, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
 import { assemble, bodyLineReveal, gesture, typeChars } from "@/lib/textAnim";
-import { PERSONAS } from "@/lib/content";
+import { ARCHETYPES, ORCHESTRATOR } from "@/lib/content";
 import { FIGURES } from "@/lib/figures";
 import { InlineFigure } from "./WireframeFigures";
 
-const [ORCHESTRATOR, ...COUNCIL] = PERSONAS;
+/**
+ * The four archetype cards. Named COUNCIL through v3, when this section still
+ * presented them as a fixed cast that had already been assembled for the one
+ * example scenario. They are a menu, not a council — see the section copy
+ * below and the note over `ARCHETYPES` in `content.ts`.
+ */
+const COUNCIL = ARCHETYPES;
 
 /**
  * The Orchestrator splits to create the four personas, then they talk — and
  * then, as of v3, they keep breathing.
+ *
+ * WHAT THIS SECTION IS SAYING (v4). Strategist / Skeptic / Loyalist / Wildcard
+ * are not characters. They are the palette of behavioural types you pick from
+ * when you promote an entity out of the graph, and the same four are available
+ * for whichever entity that turns out to be. The previous copy read as "here
+ * are the four agents in this story", which is the wrong model twice over: it
+ * tied each archetype to a person it does not belong to, and it implied the
+ * cast was fixed rather than chosen. The Orchestrator is not a fifth option on
+ * that menu either — it is a system role the engine supplies itself, which is
+ * why it lives in its own export and wears a different label to the four.
+ *
+ * The mitosis animation survives the reframe unchanged, and reads better under
+ * it: what flies out of the Orchestrator is now four available roles being put
+ * on the table, not four people being born.
  *
  * THE BACKGROUND. A photograph of a face whose features have been taken over
  * by something that is not them, full-bleed behind this section and nowhere
@@ -501,16 +521,26 @@ export function AgentsSection() {
       id="agents"
       ref={root}
       aria-labelledby="agents-heading"
-      className="sec-agents relative overflow-hidden py-24 lg:py-36"
+      className="sec-agents sec-seam relative overflow-hidden py-24 lg:py-36"
     >
       {/* The borrowed face. Scoped to this section and nowhere else on the
           page. Purely atmospheric, so `aria-hidden` and an empty alt: what the
           section means is said in the heading and the copy. The inset is
           negative so the drift has somewhere to go without ever exposing an
-          edge of the plate. */}
+          edge of the plate.
+
+          `agents-bg-plate` carries the top/bottom fade, and it lives on THIS
+          wrapper rather than on `.agents-bg-img` for two reasons. The wrapper
+          is exactly the section box, so 15vh means 15vh from the section's own
+          edge; the image inside it is inset by -6% and drifts, so a mask there
+          resolves against a taller, moving box and left the plate still at 65%
+          opacity where the section ended. And the fade has to take the scrim
+          with it: fading the photograph alone out of a scrim that stayed put
+          would just darken the last strip of the section, which is the same
+          hard edge in the other direction. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 overflow-hidden"
+        className="agents-bg-plate pointer-events-none absolute inset-0 overflow-hidden"
       >
         <div className="agents-bg-img absolute inset-[-6%]">
           <Image
@@ -536,9 +566,9 @@ export function AgentsSection() {
             <span className="stage-rule reveal-target mb-8" aria-hidden="true" />
             <h2
               id="agents-heading"
-              className="agents-heading display-sm max-w-[14ch] text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
+              className="agents-heading display-sm max-w-[18ch] text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
             >
-              You decide which of them wake up.
+              You pick who wakes up, and who they wake up as.
             </h2>
           </div>
 
@@ -546,13 +576,16 @@ export function AgentsSection() {
             <p className="agents-body font-mono text-[15px] leading-relaxed text-ink-dim">
               Extraction produces candidates, not agents. Promotion is a manual
               gate the engine will not walk through on its own: a human reviews
-              what the graph found and picks the entities worth simulating.
+              what the graph found, picks the entities worth simulating, and
+              assigns each one an archetype.
             </p>
             <p className="agents-body mt-5 font-mono text-[15px] leading-relaxed text-ink-dim">
-              Each promoted entity becomes fully autonomous, with its own
-              persona, its own private memory, and its own scoped view of the
-              shared graph and document store. Everything you leave alone stays
-              a node: still in Neo4j, still queryable, just not talking.
+              The archetype is the behaviour, not the identity. Any entity in
+              the graph can be promoted under any of the four below, the same
+              archetype can go to a different entity on the next run, and the
+              entity behind it still supplies what the agent knows and which
+              edges it can reach. Everything you leave alone stays a node: still
+              in Neo4j, still queryable, just not talking.
             </p>
           </div>
         </div>
@@ -626,8 +659,11 @@ export function AgentsSection() {
                   />
                 </div>
                 <div>
+                  {/* Was "ARCHETYPE / PRIMARY", which put the Orchestrator at
+                      the top of the same menu as the four and read as a fifth
+                      choice with seniority. It is not on the menu at all. */}
                   <span className="hud-label text-[color:var(--ink-aurum)]">
-                    ARCHETYPE / PRIMARY
+                    SYSTEM ROLE / NOT ASSIGNABLE
                   </span>
                   <h3 className="display-sm mt-3 text-2xl text-ink sm:text-[1.7rem]">
                     {ORCHESTRATOR.name}
@@ -643,9 +679,29 @@ export function AgentsSection() {
             </article>
           </div>
 
-          {/* ---- The promoted council ---- */}
-          <ul className="relative z-10 mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {COUNCIL.map((p) => (
+          {/* ---- The archetype palette ----
+
+              Presented as a menu you choose from, not a cast that already
+              exists. There is no backend behind this page, so nothing here
+              pretends to be a real control: the affordance is typographic —
+              a palette header, a slot number on every card, and the word
+              ASSIGN rather than PROMOTED — which says "these are the options"
+              without implying a click that would go nowhere. */}
+          <div className="reveal-target mt-16 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-t border-line pt-5">
+            <span className="hud-label text-[color:var(--ink-aurum)]">
+              ARCHETYPE PALETTE / 04 AVAILABLE
+            </span>
+            <p className="font-mono text-[12.5px] leading-relaxed text-ink-dim">
+              One per promoted entity. Reusable across entities, and across
+              runs.
+            </p>
+          </div>
+
+          <ul
+            aria-label="The four assignable archetypes"
+            className="relative z-10 mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {COUNCIL.map((p, i) => (
               <li key={p.id} className="persona-card reveal-target">
                 <article className="panel panel-glow flex h-full flex-col p-6">
                   <div className="flex items-start justify-between gap-3">
@@ -662,8 +718,10 @@ export function AgentsSection() {
                         jointClass="pf-joint"
                       />
                     </span>
+                    {/* Was "PROMOTED", which stated that this figure already
+                        was an agent in some run. It is a slot on a menu. */}
                     <span className="hud-label whitespace-nowrap text-[color:var(--ink-ignis)]">
-                      PROMOTED
+                      ASSIGN {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>
                   <h3 className="display-sm mt-5 text-lg text-ink">{p.name}</h3>

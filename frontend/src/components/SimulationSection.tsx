@@ -148,7 +148,7 @@ export function SimulationSection() {
       id="simulation"
       ref={root}
       aria-labelledby="simulation-heading"
-      className="sec-sim relative py-24 lg:py-32"
+      className="sec-sim sec-seam relative py-24 lg:py-32"
     >
       <div
         aria-hidden="true"

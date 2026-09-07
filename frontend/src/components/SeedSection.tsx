@@ -26,7 +26,7 @@ export function SeedSection() {
     <section
       id="seed"
       aria-labelledby="seed-heading"
-      className="sec-seed relative pt-24 lg:pt-32"
+      className="sec-seed sec-seam relative pt-24 lg:pt-32"
     >
       <div
         aria-hidden="true"

@@ -78,8 +78,21 @@ export function RecapSection() {
       id="recap"
       ref={root}
       aria-labelledby="recap-heading"
-      className="sec-recap relative overflow-hidden border-t border-line py-24 lg:py-32"
+      className="sec-recap sec-seam relative overflow-hidden py-24 lg:py-32"
     >
+      {/* The one section that never had a wash, which is why the run from
+          Chat through Recap into the FAQ used to read colour, black, colour.
+          It picks up the same #ff6a3d -> #2f6bff pair its seam bands and its
+          step cards already use, which is also the pair the FAQ's own --ga
+          continues from: the blue leaving the bottom of this section and the
+          blue arriving at the top of the FAQ are literally the same value, so
+          that particular boundary now has no visible join at all. */}
+      <div
+        aria-hidden="true"
+        className="sec-wash"
+        style={{ "--wash-x": "72%", "--wash-y": "34%" } as React.CSSProperties}
+      />
+
       <div className="relative mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-14">
         <div className="grid gap-8 lg:grid-cols-2 lg:items-end lg:gap-16">
           <div>

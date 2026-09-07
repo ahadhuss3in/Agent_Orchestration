@@ -1,3 +1,4 @@
+import { REPO_URL } from "@/lib/content";
 import { ParticleWordmark } from "./ParticleWordmark";
 
 /**
@@ -20,7 +21,7 @@ const FOOTER_LINKS = [
 
 export function CtaFooter() {
   return (
-    <footer id="page-footer" className="sec-recap relative border-t border-line">
+    <footer id="page-footer" className="sec-recap sec-seam relative">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
@@ -36,13 +37,36 @@ export function CtaFooter() {
           Start with one sentence.
         </h2>
         <p className="mt-6 max-w-[52ch] font-mono text-[15px] leading-relaxed text-ink-dim">
-          Everything downstream, the graph and the cast and the rounds and the
-          conversation afterwards, comes out of whatever moment you decide to
-          type in first.
+          Everything downstream, the graph and the archetypes you assign and
+          the rounds and the conversation afterwards, comes out of whatever
+          moment you decide to type in first.
         </p>
-        <a className="btn btn-primary mt-9" href="#seed">
-          Walk through a seed end to end
-        </a>
+        {/*
+          Two exits, ranked. The primary one is still the in-page walkthrough,
+          because this page's job is to explain the engine. The ghost button
+          beside it is for the reader who has now finished the whole page and
+          wants the actual thing: it goes to the real repository, opens in a
+          new tab because it leaves the site, and carries `noopener` (which
+          severs `window.opener` on the new tab) and `noreferrer` alongside it.
+          The label names GitHub in words rather than relying on the glyph, and
+          a visually-hidden note says the tab is new, so a screen reader is not
+          silently navigated somewhere else.
+        */}
+        <div className="mt-9 flex flex-wrap items-center gap-4">
+          <a className="btn btn-primary" href="#seed">
+            Walk through a seed end to end
+          </a>
+          <a
+            className="btn btn-ghost"
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span aria-hidden="true">&#8599;</span>
+            Read the source on GitHub
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </div>
       </div>
 
       <div className="border-t border-line">

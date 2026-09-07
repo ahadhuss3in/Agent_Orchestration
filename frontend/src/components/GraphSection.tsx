@@ -44,7 +44,7 @@ export function GraphSection() {
     <section
       id="graph"
       aria-labelledby="graph-heading"
-      className="sec-graph relative overflow-hidden py-24 lg:py-36"
+      className="sec-graph sec-seam relative overflow-hidden py-24 lg:py-36"
     >
       <div
         aria-hidden="true"

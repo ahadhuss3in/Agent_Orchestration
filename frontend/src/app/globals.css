@@ -457,18 +457,205 @@ section[id] {
    Contrast would still hold at 0.2, but a wash that heavy over a full
    viewport starts pulling the page back toward the saturated look that was
    rejected earlier — on black the discipline is the constraint, not the
-   maths. */
+   maths.
+
+   v4: the ellipse was 70% x 55% and died to transparent at 72% of its own
+   radius, which on a tall section put the last of the colour a long way inside
+   the section's own top and bottom edges. Every boundary therefore had flat
+   black on both sides of it — no literal border line, and a hard cut all the
+   same. The ellipse is now 96% x 82% and holds colour out to 86%, so the wash
+   reaches the edges instead of dying mid-section. Peak opacity is unchanged at
+   0.12, so every contrast number above still holds: a wider gradient at the
+   same alpha lights more of the section, it does not light any of it harder. */
 .sec-wash {
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0.12;
   background: radial-gradient(
-    ellipse 70% 55% at var(--wash-x, 78%) var(--wash-y, 26%),
+    ellipse 96% 82% at var(--wash-x, 78%) var(--wash-y, 26%),
     var(--ga) 0%,
-    var(--gb) 42%,
-    transparent 72%
+    var(--gb) 46%,
+    transparent 86%
   );
+  /* The wash hands the last 9vh at each end over to the seam bands.
+
+     Without this the wash is the thing that cuts. Its intensity at a section's
+     own edge depends on where that section happens to have put --wash-x /
+     --wash-y, so two neighbours arrive at their shared boundary at completely
+     unrelated strengths — measured, that put a 53-point summed-RGB step across
+     the Recap/FAQ join even though both sides of it are the same #2f6bff. The
+     seam bands are the only thing that should be speaking at a boundary,
+     because they are the only thing that knows what is on the other side.
+
+     9vh, not 15vh, because the two have to OVERLAP. The seam band is 18vh deep
+     and is down to 5% by 10.4vh, so a wash that only reached full strength at
+     15vh left a dim trough between the two — a section that had stopped being
+     lit by its own wash but was not yet close enough to the boundary for the
+     seam to carry it. Handing over at 9vh puts the wash back at full strength
+     while the band still has most of its weight, and the trough closes. */
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 9vh,
+    #000 calc(100% - 9vh),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 9vh,
+    #000 calc(100% - 9vh),
+    transparent 100%
+  );
+}
+
+/* ------------------------------------------------------------
+   SECTION SEAMS — carrying the colour across the boundary.
+
+   Widening the wash stops each section fading to black in its own middle, but
+   it cannot on its own join one section to the next: at the join, section A's
+   --gb meets section B's --ga with nothing in between. These two bands are
+   that in-between.
+
+   `::after` ramps the section's OWN --gb up towards its bottom edge; the next
+   section's `::before` picks its --ga up off the same edge and ramps it back
+   down. Read across a boundary the two are one continuous colour drift from
+   the outgoing accent into the incoming one, peaking exactly at the join, over
+   a ~36vh span. Nothing is positioned relative to a neighbour and nothing has
+   to know what section follows it, which is why this survives sections being
+   reordered and why it works under `overflow: hidden` — both bands live
+   strictly inside their own section's box.
+
+   The pseudo-elements are the section's first children in paint order, so they
+   sit under `.sec-wash`, under the Agents photograph, and under every content
+   wrapper (all of which are positioned and come later in tree order).
+
+   CONTRAST. Peak alpha is 12%, the same ceiling the wash uses, and the two
+   stack only near an edge. Worst case on a plain section is the brightest
+   accent pair in the file: #00e2b8 at 12% over --paper composites to
+   rgb(7,34,31), and with the Simulation wash at full strength on top of that
+   the ground is rgb(6,46,38), L = 0.0213 — leaving --ink-dim at 5.8:1 and
+   --ink at 12.3:1. The one section with no headroom was Agents, whose scrim
+   was already sized to the brightest pixel its photograph can produce; that
+   scrim was re-derived rather than left alone, see `.agents-bg-scrim`.
+   ------------------------------------------------------------ */
+
+.sec-seam::before,
+.sec-seam::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 18vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* WHY THE CREST IS NOT AT THE EDGE.
+
+   The obvious shape is 12% at the boundary falling to 0% inward, and it is
+   wrong. Two neighbouring bands both peaking at the join means the join is
+   where the outgoing accent is strongest AND where the incoming one is
+   strongest, so the reader gets one full-strength colour replaced by another
+   in a single pixel — a smaller cut than flat black, but still a cut.
+   Sampled at 1440x900 that shape stepped 45 summed-RGB across the
+   Simulation/Chat join in one 20px sample.
+
+   Crest at 26% in and 8% at the edge itself means each band rises, peaks a few
+   vh short of the boundary, and eases back down into the handover. Read across
+   the join it is: A's accent swelling, cresting, softening, B's accent picking
+   up, cresting, softening. The step at the join is now between two 8% tints
+   rather than two 12% ones, and the eye reads the pair as one long drift with
+   the changeover buried in its quietest part. */
+
+.sec-seam::before {
+  top: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--seam-in, var(--ga)) 8%, transparent) 0%,
+    color-mix(in srgb, var(--seam-in, var(--ga)) 12%, transparent) 26%,
+    color-mix(in srgb, var(--ga) 5%, transparent) 58%,
+    transparent 100%
+  );
+}
+
+.sec-seam::after {
+  bottom: 0;
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--seam-out, var(--gb)) 8%, transparent) 0%,
+    color-mix(in srgb, var(--seam-out, var(--gb)) 12%, transparent) 26%,
+    color-mix(in srgb, var(--gb) 5%, transparent) 58%,
+    transparent 100%
+  );
+}
+
+/* ------------------------------------------------------------
+   THE HANDOFF TABLE.
+
+   The last thing that cuts at a boundary is that the two sides are still
+   different colours there. Section A's band ends on A's --gb and section B's
+   begins on B's --ga, so however softly each one ramps, the join itself is one
+   accent replaced by another in a single pixel. Measured, that was worth
+   22-55 summed RGB per join even after the crest had been moved inward.
+
+   A boundary is not a property of either section — it is a property of the
+   PAIR — so it cannot be derived from --ga / --gb alone and something has to
+   name it. This table does, once, in the only place on the page where the
+   whole running order is visible at a glance. Each pair's two halves are set
+   to the same 50/50 sRGB mix of the accents either side, so the two bands meet
+   at an identical value and the join disappears; each band then travels from
+   that shared colour to its own section's accent over its 18vh, which is where
+   the drift the reader actually notices happens.
+
+   `in srgb`, not `in oklch`. A perceptual hue arc between, say, #2f6bff and
+   #f2b705 is 179 degrees apart and could resolve either way round the wheel —
+   one of those ways runs through violet, which this palette does not contain
+   and is not going to acquire by accident. An sRGB midpoint is duller and
+   cannot surprise anyone.
+
+   Keyed on id rather than on .sec-*, because .sec-chat and .sec-recap each
+   appear twice on the page with different neighbours on either side of them
+   and a class rule could not tell those instances apart.
+   ------------------------------------------------------------ */
+
+#top {
+  --seam-out: color-mix(in srgb, var(--grad-seed-b), var(--grad-seed-a));
+}
+#seed {
+  --seam-in: color-mix(in srgb, var(--grad-seed-b), var(--grad-seed-a));
+  --seam-out: color-mix(in srgb, var(--grad-seed-b), var(--grad-graph-a));
+}
+#graph {
+  --seam-in: color-mix(in srgb, var(--grad-seed-b), var(--grad-graph-a));
+  --seam-out: color-mix(in srgb, var(--grad-graph-b), var(--grad-agents-a));
+}
+#agents {
+  --seam-in: color-mix(in srgb, var(--grad-graph-b), var(--grad-agents-a));
+  --seam-out: color-mix(in srgb, var(--grad-agents-b), var(--grad-sim-a));
+}
+#simulation {
+  --seam-in: color-mix(in srgb, var(--grad-agents-b), var(--grad-sim-a));
+  --seam-out: color-mix(in srgb, var(--grad-sim-b), var(--grad-chat-a));
+}
+#chat {
+  --seam-in: color-mix(in srgb, var(--grad-sim-b), var(--grad-chat-a));
+  --seam-out: color-mix(in srgb, var(--grad-chat-b), #ff6a3d);
+}
+#recap {
+  --seam-in: color-mix(in srgb, var(--grad-chat-b), #ff6a3d);
+  /* Recap's own --gb and the FAQ's --ga are already the same #2f6bff, so this
+     join needs no midpoint — it is the one boundary on the page with nothing
+     to reconcile. */
+  --seam-out: #2f6bff;
+}
+#faq {
+  --seam-in: #2f6bff;
+  --seam-out: color-mix(in srgb, var(--grad-chat-b), #ff6a3d);
+}
+#page-footer {
+  --seam-in: color-mix(in srgb, var(--grad-chat-b), #ff6a3d);
 }
 
 /* ------------------------------------------------------------
@@ -692,11 +879,13 @@ html.js-motion .hero-block {
 /* The terminal-styled jump chip. --gink is measured >= 8:1 on both black
    surfaces for every section, so this is legible as small text, unlike the
    raw gradient stops. */
+/* The 1.1rem top margin moved onto the row wrapper when a second chip was
+   added beside this one — left here it would have applied twice and pushed
+   the two chips apart vertically the moment the row wrapped. */
 .faq-jump {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1.1rem;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--line-strong);
   border-radius: 3px;
@@ -715,6 +904,21 @@ html.js-motion .hero-block {
   background: rgba(244, 244, 246, 0.05);
 }
 
+/* The one chip that leaves the page. Same geometry and the same type as its
+   in-page sibling so the pair reads as one control group; the difference is
+   carried by the border and the label, not by a different shape. --ink at
+   16.9:1 on --paper-raised, so the stronger colour costs nothing. */
+.faq-jump-ext {
+  border-color: var(--gink);
+  color: var(--ink);
+  background: rgba(244, 244, 246, 0.05);
+}
+
+.faq-jump-ext:hover {
+  border-color: var(--ink);
+  background: rgba(244, 244, 246, 0.1);
+}
+
 /* ------------------------------------------------------------
    Agents section background — the borrowed face.
 
@@ -722,19 +926,48 @@ html.js-motion .hero-block {
    brightest channel is a full 255, so the scrim is sized against a pure white
    source pixel and there is no brighter case for it to fail on.
 
-     image at 0.34 over #000            -> rgb(87,87,87)
-     + scrim at its LIGHTEST point 0.36 -> rgb(55,55,55), L = 0.0389
-     + scrim at its heaviest point 0.48 -> rgb(45,45,45), L = 0.0262
+   v4 — THE PLATE IS MASKED AT BOTH EDGES NOW, and the scrim was re-derived
+   around that rather than nudged.
 
-   Against the lightest point, which is the number that has to hold:
-     --ink     #f4f4f6  ->  10.76 : 1
-     --ink-dim #a2a2ae  ->   4.68 : 1
-   Both clear 4.5:1 on the brightest pixel the image can produce, so every
-   foreground element in the section clears it everywhere else too. The first
-   pass at this used a 0.30 lightest stop, which measured 4.32:1 for --ink-dim
-   — close enough to look fine and not close enough to ship. The persona cards
-   sit on the opaque --paper-raised panel fill and are not relying on the
-   scrim at all.
+   THE MASK is a section-seam fix, not an aesthetic one. Sampling the page's
+   background down a column through every boundary, this was the only join that
+   still showed a genuine cut after the seam bands went in: rgb(62,45,35) on
+   the Agents side of the line and rgb(7,28,22) on the Simulation side, a jump
+   of 94 summed RGB in one 20px sample, an order of magnitude worse than any
+   other boundary on the page. The cause was not colour at all — it was that a
+   full-bleed photograph at 0.34 simply stopped existing at `inset: 0`. No
+   gradient underneath it can smooth an edge that hard, so the plate now fades
+   out over the last 22vh at each end and the seam bands hand over on clean
+   ground. 22vh rather than something tighter because the fade itself has to be
+   invisible: a 15vh version measured a 55-point step of its own where the
+   photograph came in, trading a hard edge at the boundary for a soft band a
+   quarter of a screen above it.
+
+   THE SCRIM. Masking the plate away from the edges means the image and the
+   seam band never reach full strength in the same place, so the worst pixel is
+   no longer at an edge — it is around 22vh in, where the mask has just gone
+   fully opaque, the wash (whose own mask hands over at 9vh) is back at full
+   strength, and the seam band has faded to nothing. Compositing in order on a
+   pure white source pixel, with the scrim at 0.474, its value there on the
+   ramp from 0.50 down to 0.42:
+
+     --paper                          rgb(  8,  8, 10)
+     + wash at 0.12                -> rgb( 37, 26, 13)
+     + image at 0.34, white pixel  -> rgb(111,104, 95)
+     + scrim 0.474                 -> rgb( 58, 55, 50), L = 0.0383
+
+       --ink     #f4f4f6  ->  10.82 : 1
+       --ink-dim #a2a2ae  ->   4.71 : 1
+
+   Slightly better than the 4.68:1 the v3 stops held, and arrived at honestly
+   rather than by leaving the number alone and hoping. Both edges are trivially
+   safe now that the image is not there at all: seam plus wash alone never gets
+   past L = 0.02.
+
+   Stops went 0.48/0.36/0.46 -> 0.50/0.42/0.50. The middle stop moved most,
+   because that is where the widened `.sec-wash` added the most light. The
+   persona cards sit on the opaque --paper-raised panel fill and are not
+   relying on the scrim at all.
    ------------------------------------------------------------ */
 
 .agents-bg-img {
@@ -742,12 +975,33 @@ html.js-motion .hero-block {
   will-change: transform;
 }
 
+/* The plate and its scrim faded out together at both ends of the section.
+   Both prefixes: the unprefixed property is well supported now, the prefixed
+   one is what older WebKit actually reads, and a mask that silently failed to
+   apply would put the hard edge straight back. */
+.agents-bg-plate {
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 22vh,
+    #000 calc(100% - 22vh),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    #000 22vh,
+    #000 calc(100% - 22vh),
+    transparent 100%
+  );
+}
+
 .agents-bg-scrim {
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0.48) 0%,
-    rgba(0, 0, 0, 0.36) 42%,
-    rgba(0, 0, 0, 0.46) 100%
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.42) 42%,
+    rgba(0, 0, 0, 0.5) 100%
   );
 }
 

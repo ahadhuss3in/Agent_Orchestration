@@ -277,7 +277,7 @@ export function Hero() {
     <section
       id="top"
       ref={root}
-      className="sec-seed relative flex min-h-dvh items-center overflow-hidden pt-24 pb-20 lg:pt-16"
+      className="sec-seed sec-seam relative flex min-h-dvh items-center overflow-hidden pt-24 pb-20 lg:pt-16"
     >
       <div
         aria-hidden="true"

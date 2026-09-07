@@ -78,23 +78,52 @@ export type FigureId =
   | "loyalist"
   | "wildcard";
 
-export const PERSONAS: {
+/**
+ * The Orchestrator is NOT one of the four archetypes below.
+ *
+ * It is a system role: the engine supplies exactly one of these per run, it is
+ * never assigned to an entity, and it is not something a person picks. It
+ * convenes the round and closes it. Kept in its own export precisely so the
+ * page cannot accidentally present it as a fifth option on the menu, which is
+ * what a single `PERSONAS` array with a destructure at the top of the section
+ * quietly did before.
+ */
+export const ORCHESTRATOR: {
+  id: FigureId;
+  name: string;
+  role: string;
+  note: string;
+} = {
+  id: "orchestrator",
+  name: "The Orchestrator",
+  role: "Convenes every round",
+  note: "Supplied by the engine, one per run, never assigned to an entity. It holds the shared briefing, decides who speaks to what, and closes each round with a directive the others carry forward.",
+};
+
+/**
+ * The archetype palette.
+ *
+ * These are BEHAVIOURAL TYPES, not characters. None of them belongs to any
+ * particular person, organization or location. When a human promotes an entity
+ * out of the graph they choose which of these four it carries, and that choice
+ * is what decides how the entity argues once the rounds start. The same
+ * archetype can be assigned to a different entity on the next run, and one
+ * entity can be re-promoted under a different archetype entirely.
+ *
+ * So every `note` below describes what the archetype DOES to whatever entity
+ * wears it — never what some specific character in some specific scenario did.
+ */
+export const ARCHETYPES: {
   id: FigureId;
   name: string;
   role: string;
   note: string;
 }[] = [
   {
-    id: "orchestrator",
-    name: "The Orchestrator",
-    role: "Convenes the round",
-    note: "Holds the shared briefing, decides who speaks to what, and closes each round with a directive the others carry forward.",
-  },
-  {
     id: "strategist",
     name: "The Strategist",
     role: "Plans forward",
-    note: "Reads the relationship edges for leverage and proposes the sequence of moves it thinks survives contact.",
+    note: "Reads the relationship edges around its entity for leverage, and proposes the sequence of moves it thinks survives contact.",
   },
   {
     id: "skeptic",
@@ -106,7 +135,7 @@ export const PERSONAS: {
     id: "loyalist",
     name: "The Loyalist",
     role: "Defends the position",
-    note: "Argues from the organization's stated interest and supplies the details only an insider entity would carry.",
+    note: "Argues from its entity's stated interest and supplies the details only someone on the inside of it would carry.",
   },
   {
     id: "wildcard",
@@ -175,6 +204,9 @@ export const CHAT_MOCK: { from: "operator" | "agent"; text: string }[] = [
   },
 ];
 
+/** The project's own repository. Verified against this machine's `git remote`. */
+export const REPO_URL = "https://github.com/ahadhuss3in/Agent_Orchestration";
+
 /**
  * The FAQ near the foot of the page.
  *
@@ -186,26 +218,47 @@ export const CHAT_MOCK: { from: "operator" | "agent"; text: string }[] = [
  * `jump` is the point of the section. Each answer ends at a place on this page
  * that shows the thing it just described, which turns the list into a short
  * guided tour instead of a wall of text.
+ *
+ * TRIMMED FROM EIGHT TO SIX. Three of the original eight were not carrying
+ * their own weight and one replaced them:
+ *
+ *   - "Can I seed a real event, or only invented ones?" said, at greater
+ *     length, exactly what the Seed section's own body paragraph says twenty
+ *     lines further up the page. A FAQ that repeats the copy the reader has
+ *     already scrolled past is filler.
+ *   - "Is the chat panel a working chat?" was a second, narrower ask of "would
+ *     this page actually run" — same answer, less scope. Folded into the first
+ *     question, which now names the chat mock-up explicitly.
+ *   - "What happens once a simulation ends?" was largely a restatement of
+ *     pipeline step 07. Its one genuinely load-bearing claim (agents keep their
+ *     memory afterwards) moved into the promotion question, and the #chat jump
+ *     it owned moved with it so the tour still touches every section.
+ *
+ * What is left is six questions, each about a decision the engine actually
+ * makes, and between them they still land on all six sections.
  */
 export const FAQS: {
   q: string;
   a: string;
   jump: { href: string; label: string };
+  /** Optional off-site link, rendered as a second chip beside `jump`. */
+  ext?: { href: string; label: string };
 }[] = [
   {
     q: "If I typed a seed into this page, would it actually run?",
-    a: "No. This page is a presentation of the engine, not a deployment of it. There is no input bound to a backend anywhere on it, and the seed shown in the Seed section is a fixed example rather than a field. Everything you scroll past is an illustration of a pipeline that runs elsewhere.",
+    a: "No. This page is a presentation of the engine, not a deployment of it. Nothing on it is bound to a backend: the seed in the Seed section is a fixed example rather than a field, and the chat panel further down is a labelled mock-up whose composer is deliberately not a focusable input, because a real one with nothing behind it would imply a request that is never sent. The engine itself is a separate set of services, and the code for it is public.",
     jump: { href: "#seed", label: "See the seed step" },
+    ext: { href: REPO_URL, label: "Read the source on GitHub" },
   },
   {
     q: "What happens to entities I don't promote into agents?",
     a: "Nothing is thrown away. Extraction writes every person, organization and location it found into Neo4j whether or not you promote it. An un-promoted entity stays a node with all its relationships intact — still queryable, still available to whatever an agent retrieves — it just never speaks. Promotion decides who acts, not who exists.",
-    jump: { href: "#agents", label: "Jump to Agents" },
+    jump: { href: "#graph", label: "Jump to the Graph" },
   },
   {
-    q: "Can I seed a real event, or only invented ones?",
-    a: "Either. The distinction only changes step two. A seed described as real triggers a live web context fetch before extraction, so the graph is built against what is actually known about it. A fictional seed skips that fetch entirely and the engine reads nothing but the sentence you wrote.",
-    jump: { href: "#seed", label: "See the seed step" },
+    q: "Can two entities be promoted under the same archetype?",
+    a: "Yes. An archetype is a behavioural setting, not a cast member, so nothing stops you running two Skeptics, or a round with no Wildcard in it at all. The archetype decides how an agent argues; the entity behind it decides what that agent knows and which edges of the graph it can reach, so two Skeptics attached to different entities do not produce the same round twice.",
+    jump: { href: "#agents", label: "Jump to Agents" },
   },
   {
     q: "How does a long run avoid blowing up the context window?",
@@ -213,24 +266,14 @@ export const FAQS: {
     jump: { href: "#simulation", label: "Jump to Simulation" },
   },
   {
-    q: "What happens once a simulation ends?",
-    a: "The run stops and the transcript stays. Every agent keeps its persona, its private memory of what it said, and whatever it retrieved during the rounds. From there you can open a direct conversation with any one of them about a decision it actually made.",
-    jump: { href: "#chat", label: "Jump to Chat" },
-  },
-  {
-    q: "Is the chat panel further up this page a working chat?",
-    a: "No, and it is labelled as a mock-up in place for exactly that reason. The composer under it is deliberately a plain element rather than a real text input, because a focusable field with nothing behind it would imply a request that is never sent.",
-    jump: { href: "#chat", label: "Jump to Chat" },
-  },
-  {
     q: "Does re-running the same seed duplicate the graph?",
     a: "No. The Neo4j write is idempotent: re-running a seed updates the nodes and relationships already there rather than stacking a second copy of each beside the first. Extraction can be re-run against a seed as many times as you like without the graph drifting.",
-    jump: { href: "#graph", label: "Jump to the Graph" },
+    jump: { href: "#recap", label: "Read the pipeline" },
   },
   {
     q: "Why is promotion a manual gate instead of an automatic one?",
-    a: "Because it is the step that decides which entities get to act, and a model picking that on its own would quietly set the shape of everything downstream. It is one of the seven pipeline steps and the only one the engine will not walk through by itself.",
-    jump: { href: "#recap", label: "Read the pipeline" },
+    a: "Because it is the step that decides which entities get to act and which archetype each of them argues from, and a model picking both on its own would quietly set the shape of everything downstream. It is one of the seven pipeline steps and the only one the engine will not walk through by itself. What it decides then outlives the run: after the rounds stop, every agent keeps the persona you gave it and its private memory of what it said, which is what makes the 1:1 chat afterwards worth having.",
+    jump: { href: "#chat", label: "Jump to Chat" },
   },
 ];
 

@@ -177,8 +177,8 @@ export function HudRail() {
             style={{ width: `${progress * 100}%`, background: "var(--grad-recap)" }}
           />
         </div>
-        <div className="flex items-center justify-between border-b border-line bg-paper/90 px-4 py-1.5 backdrop-blur-sm">
-          <span className="hud-label text-ink-dim">PANTHEON</span>
+        <div className="flex items-center justify-between border-b border-line bg-paper px-4 py-1.5">
+          <span className="hud-label text-ink">PANTHEON</span>
           <a
             href={`#${current.id}`}
             className="hud-label text-ink"

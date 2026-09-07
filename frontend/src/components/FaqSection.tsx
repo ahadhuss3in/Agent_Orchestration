@@ -21,7 +21,7 @@ const INITIAL_OPEN = 0;
  * The FAQ, with a jump chip in every answer.
  *
  * ACCORDION MECHANICS. One panel open at a time, which is what makes the
- * chips read as a route through the page rather than eight loose links. Every
+ * chips read as a route through the page rather than six loose links. Every
  * trigger is a real `<button>` inside its heading, carrying `aria-expanded`
  * and `aria-controls` pointed at the panel's `id`; the panel is a labelled
  * region. Collapsed panels go to `visibility: hidden`, so their content leaves
@@ -30,7 +30,7 @@ const INITIAL_OPEN = 0;
  *
  * WITH JAVASCRIPT OFF the first answer is open and the rest are collapsed —
  * this is the one place on the page whose no-JS state is not the complete
- * state. It is a deliberate trade: the alternative is rendering all eight
+ * state. It is a deliberate trade: the alternative is rendering all six
  * expanded and collapsing them on mount, which flashes a full-height list on
  * every load. Nothing here is load-bearing information; the Recap section
  * still explains the whole product end to end with no JS and no CSS.
@@ -109,12 +109,24 @@ export function FaqSection() {
           duration: d,
           ease: "power2.inOut",
         });
-        const chip = panel.querySelector<HTMLElement>(".faq-jump");
-        if (chip) {
+        // `querySelectorAll`, not `querySelector`: one answer now carries a
+        // second, external chip beside its in-page jump, and a single-element
+        // query left that one sitting at whatever opacity it was last given.
+        const chips = Array.from(
+          panel.querySelectorAll<HTMLElement>(".faq-jump"),
+        );
+        if (chips.length) {
           gsap.fromTo(
-            chip,
+            chips,
             { opacity: 0, x: -10 },
-            { opacity: 1, x: 0, duration: d, delay: d * 0.4, ease: "power2.out" },
+            {
+              opacity: 1,
+              x: 0,
+              duration: d,
+              delay: d * 0.4,
+              ease: "power2.out",
+              stagger: d * 0.25,
+            },
           );
         }
       } else {
@@ -144,7 +156,7 @@ export function FaqSection() {
       id="faq"
       ref={root}
       aria-labelledby="faq-heading"
-      className="sec-chat relative overflow-hidden border-t border-line py-24 lg:py-32"
+      className="sec-chat sec-seam relative overflow-hidden py-24 lg:py-32"
     >
       <div
         aria-hidden="true"
@@ -235,10 +247,34 @@ export function FaqSection() {
                       <p className="max-w-[58ch] font-mono text-[13.5px] leading-relaxed text-ink-dim">
                         {item.a}
                       </p>
-                      <a className="faq-jump" href={item.jump.href}>
-                        <span aria-hidden="true">&rarr;</span>
-                        {item.jump.label}
-                      </a>
+                      <div className="mt-[1.1rem] flex flex-wrap items-center gap-3">
+                        <a className="faq-jump" href={item.jump.href}>
+                          <span aria-hidden="true">&rarr;</span>
+                          {item.jump.label}
+                        </a>
+                        {/* The one answer that sends you off the page gets a
+                            second chip rather than replacing the first: the
+                            in-page jump is what makes this list a tour, and
+                            swapping it for an external link on the question
+                            people most want a real answer to would cost that.
+                            `target="_blank"` because it leaves the page, so
+                            `rel` carries both noopener and noreferrer, and the
+                            label says GitHub in words — the arrow glyph is
+                            decorative and hidden from the accessibility tree,
+                            so the link is never announced as just "arrow". */}
+                        {item.ext && (
+                          <a
+                            className="faq-jump faq-jump-ext"
+                            href={item.ext.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <span aria-hidden="true">&#8599;</span>
+                            {item.ext.label}
+                            <span className="sr-only"> (opens in a new tab)</span>
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </li>
