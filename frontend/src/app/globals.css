@@ -451,16 +451,18 @@ section[id] {
    section reads as its own colour without tinting any text.
 
    v3: 0.075 was tuned for a white page, where the wash darkened the ground.
-   On black it lightens it, so the number was re-derived from the worst case
-   rather than nudged: at 0.16 the hottest stop (#ff6a3d) composites over
-   #08080a to about rgb(48,25,17), L = 0.009, which still leaves --ink-dim at
-   7.0:1 and --ink at 16.3:1. Anything much past 0.2 starts eating into the
-   4.5:1 floor for the dim body copy. */
+   On black it lightens it, so the number was re-derived rather than nudged.
+   At 0.12 the hottest stop (#ff6a3d) composites over #08080a to about
+   rgb(38,20,14), L = 0.0067, leaving --ink-dim at 7.3:1 and --ink at 16.9:1.
+   Contrast would still hold at 0.2, but a wash that heavy over a full
+   viewport starts pulling the page back toward the saturated look that was
+   rejected earlier — on black the discipline is the constraint, not the
+   maths. */
 .sec-wash {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.16;
+  opacity: 0.12;
   background: radial-gradient(
     ellipse 70% 55% at var(--wash-x, 78%) var(--wash-y, 26%),
     var(--ga) 0%,
