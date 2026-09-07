@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
-import { spectrumAt } from "@/lib/spectrum";
 import { SeedCore } from "./SeedCore";
 
 /**
@@ -35,9 +34,12 @@ type Particle = {
   startScale: number;
   curScale: number;
   curAlpha: number;
+  /** Per-particle size variance, baked in once at build time — part of what
+   * keeps the formed word reading as a soft, organic scatter of dots rather
+   * than a rigid, uniform grid of identical squares. */
+  sizeJitter: number;
   delay: number;
   dur: number;
-  colorRGB: string;
 };
 
 /**
@@ -67,10 +69,13 @@ type Particle = {
  *      moment the pointer leaves. Unifying "arriving" and "fleeing the
  *      cursor" onto the same offset value means there is only ever one
  *      source of truth for where a dot actually is.
- *   4. Drawing is batched by colour: particles are bucketed once (by their
- *      position along the Spectrum sweep) so each frame sets `fillStyle`
- *      ~24 times total rather than once per particle, which is what keeps
- *      20,000 `fillRect` calls a frame cheap.
+ *   4. Every dot is plain white, round, and carries a small baked-in size
+ *      and position jitter so the formed word reads as a soft, organic
+ *      scatter rather than a rigid grid of identical squares. Because
+ *      colour is uniform there is nothing to bucket: the formed (steady)
+ *      state draws all 20,000 dots as one accumulated path and a single
+ *      `fill()` call, which is what keeps redrawing every frame for the
+ *      cursor-repulsion loop cheap.
  *
  * The real word is always in the DOM as text, and the canvas is
  * `aria-hidden`. When the formation runs, the text is only made visually
@@ -113,7 +118,6 @@ export function ParticleWordmark() {
         let trigger: ScrollTrigger | null = null;
         let rafId = 0;
         let particles: Particle[] = [];
-        let buckets: Particle[][] = [];
         let boxW = 0;
         let boxH = 0;
         let dotRadius = 1;
@@ -122,8 +126,6 @@ export function ParticleWordmark() {
         let lastWidth = 0;
         let pointerX: number | null = null;
         let pointerY: number | null = null;
-
-        const BUCKET_COUNT = 24;
 
         /** Sample the word to a point set at CSS-pixel resolution. */
         const sample = (w: number, h: number) => {
@@ -198,35 +200,30 @@ export function ParticleWordmark() {
 
           boxW = w;
           boxH = h;
-          dotRadius = Math.max(0.55, grid * 0.3);
+          dotRadius = Math.max(0.5, grid * 0.26);
 
-          particles = pts.map((p) => ({
-            tx: p.x,
-            ty: p.y,
-            offX: 0,
-            offY: 0,
-            startOffX: 0,
-            startOffY: 0,
-            startScale: gsap.utils.random(0.2, 0.6),
-            curScale: 1,
-            curAlpha: 1,
-            delay: gsap.utils.random(0, 0.5),
-            dur: gsap.utils.random(0.9, 1.7),
-            colorRGB: spectrumAt(p.x / w),
-          }));
-
-          // Bucket once per build: sorted by target x, sliced into equal
-          // runs. Colour already tracks x (the Spectrum sweep), so a
-          // contiguous run in x-sorted order is also a contiguous run in
-          // colour, which is what lets each bucket share one fillStyle. Only
-          // used once formed — during the brief forming transition each
-          // particle's alpha differs, so that phase draws unbatched instead.
-          const byX = [...particles].sort((a, b) => a.tx - b.tx);
-          buckets = [];
-          const per = Math.ceil(byX.length / BUCKET_COUNT) || 1;
-          for (let i = 0; i < byX.length; i += per) {
-            buckets.push(byX.slice(i, i + per));
-          }
+          particles = pts.map((p) => {
+            // A small jitter on the sampled lattice point itself — up to
+            // ~40% of the grid step in either direction — is what turns a
+            // perfectly regular stipple into something that reads as
+            // scattered rather than machined. Kept small enough that the
+            // letterforms stay legible; this is texture, not noise.
+            const jitter = grid * 0.4;
+            return {
+              tx: p.x + gsap.utils.random(-jitter, jitter),
+              ty: p.y + gsap.utils.random(-jitter, jitter),
+              offX: 0,
+              offY: 0,
+              startOffX: 0,
+              startOffY: 0,
+              startScale: gsap.utils.random(0.2, 0.6),
+              curScale: 1,
+              curAlpha: 1,
+              sizeJitter: gsap.utils.random(0.55, 1.35),
+              delay: gsap.utils.random(0, 0.5),
+              dur: gsap.utils.random(0.9, 1.7),
+            };
+          });
 
           lastWidth = w;
           return true;
@@ -261,6 +258,8 @@ export function ParticleWordmark() {
 
         const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
+        const TAU = Math.PI * 2;
+
         const drawFrame = () => {
           g2d.clearRect(0, 0, boxW, boxH);
 
@@ -270,31 +269,36 @@ export function ParticleWordmark() {
 
           if (phase === "forming") {
             // Alpha differs per particle during the transition, so this
-            // phase draws unbatched. It only lasts ~2s once per page view.
+            // phase fills one circle at a time. It only lasts ~2s once per
+            // page view, so the lost batching does not cost a sustained
+            // frame budget the way it would in the steady "formed" state.
             for (const p of particles) {
               if (p.curAlpha <= 0) continue;
               const x = p.tx + p.offX;
               const y = p.ty + p.offY;
-              const r = dotRadius * p.curScale;
-              g2d.fillStyle = p.curAlpha >= 1
-                ? p.colorRGB
-                : p.colorRGB.replace("rgb(", "rgba(").replace(")", `, ${p.curAlpha})`);
-              g2d.fillRect(x - r, y - r, r * 2, r * 2);
+              const r = dotRadius * p.curScale * p.sizeJitter;
+              g2d.fillStyle = `rgba(255, 255, 255, ${p.curAlpha})`;
+              g2d.beginPath();
+              g2d.arc(x, y, r, 0, TAU);
+              g2d.fill();
             }
             return;
           }
 
-          // Formed: fully opaque and batched by colour bucket, since this is
-          // the steady state the cursor-repulsion loop redraws every frame.
-          for (const bucket of buckets) {
-            if (!bucket.length) continue;
-            g2d.fillStyle = bucket[0].colorRGB;
-            for (const p of bucket) {
-              const x = p.tx + p.offX;
-              const y = p.ty + p.offY;
-              g2d.fillRect(x - dotRadius, y - dotRadius, dotRadius * 2, dotRadius * 2);
-            }
+          // Formed: every dot is white and fully opaque, so the entire
+          // 20,000-particle field is one accumulated path and one fill()
+          // call — this is what keeps the cursor-repulsion loop's per-frame
+          // redraw cheap.
+          g2d.fillStyle = "#ffffff";
+          g2d.beginPath();
+          for (const p of particles) {
+            const x = p.tx + p.offX;
+            const y = p.ty + p.offY;
+            const r = dotRadius * p.sizeJitter;
+            g2d.moveTo(x + r, y);
+            g2d.arc(x, y, r, 0, TAU);
           }
+          g2d.fill();
         };
 
         const tick = () => {

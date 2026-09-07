@@ -695,17 +695,20 @@ html.js-motion .hero-block {
   will-change: transform;
 }
 
-/* THE EFFECT.
-
-   `difference` over `exclusion`: exclusion pulls white-on-white toward a mid
-   grey, which reads as the type simply dimming. difference sends it to a hard
-   black, so every glyph edge that crosses a line of the engraving flips
-   outright — the type genuinely passes through the plate instead of sitting
-   on it. Against the black ground the same white stays white, so the wordmark
-   is at full strength everywhere it is not overlapping. */
+/* THE EFFECT, v2.
+   v1 ran this under `mix-blend-mode: difference` so the type inverted
+   against the engraving's linework as it crossed it — a nice trick, but the
+   client's own read on it was that it made the type genuinely hard to read
+   over a bust with this much fine detail. Sitting flat above the plate
+   instead: solid white, normal blend, with a soft dark shadow doing the
+   contrast work a blend mode used to. The shadow is large and low-opacity —
+   a halo behind the glyphs, not a hard drop shadow — so it holds up whether
+   the type is over black background or a bright part of the engraving. */
 .intro-word {
   color: #ffffff;
-  mix-blend-mode: difference;
+  text-shadow:
+    0 2px 28px rgba(0, 0, 0, 0.85),
+    0 0 14px rgba(0, 0, 0, 0.9);
 }
 
 /* ------------------------------------------------------------

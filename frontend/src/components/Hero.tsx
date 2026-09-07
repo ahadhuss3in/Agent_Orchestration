@@ -12,36 +12,39 @@ const CHIPS = [
 ];
 
 /**
- * The load-in, v4.
+ * The load-in, v5.
  *
- * WHAT CHANGED FROM v3: the wordmark used to be the only line, split into
- * "PAN" / "THEON" and jiggled apart to sell the blend-mode pass through the
- * engraving. The brief now wants a build-up before the name: a tagline
- * arrives first, splits apart for real, and PANTHEON rises into the gap it
- * leaves. The skip button is gone — the intro is no longer escapable.
+ * WHAT CHANGED FROM v4: the tagline and the wordmark used to sit under
+ * `mix-blend-mode: difference` so they inverted against the engraving's
+ * linework as they crossed it. Read back on the real bust — which carries a
+ * lot of fine detail — that made the type genuinely hard to read, which is
+ * the opposite of what a headline is for. Both now sit flatly above the
+ * plate: solid white, a soft dark halo (`text-shadow` in `.intro-word`)
+ * standing in for the contrast a blend mode used to provide. The "drift and
+ * settle" beat v4 had between the tagline's entrance and its exit existed
+ * specifically to walk that inversion boundary across the linework — with
+ * no blend mode left to sell, it no longer does anything, so it is gone; the
+ * tagline now goes straight from arriving to parting.
  *
  * Sequence, over the same black-stage-plus-engraving backdrop as before:
  *   1. The plate fades up centred, `object-fit: contain`, with its own
- *      continuous Ken-Burns drift (unchanged from v3).
+ *      continuous Ken-Burns drift (unchanged since v3).
  *   2. "SIMULATE" rises in first, then "ANY REALITY" joins it — two
- *      `.intro-half` elements, same entrance mechanic v3 used for its two
- *      wordmark halves, just carrying different text. Both sit under
- *      `mix-blend-mode: difference` against the engraving.
- *   3. They drift a little apart and back once (the same "walk the inversion
- *      boundary across the linework" beat from v3), then actually part: each
- *      half continues out past the edge of the stage and fades, which is the
- *      "part from the middle" the brief asks for.
+ *      `.intro-half` elements, held briefly once both are in.
+ *   3. They part: SIMULATE continues left off the stage, ANY REALITY
+ *      continues right, both fading as they go — the "part from the middle"
+ *      the brief asked for.
  *   4. PANTHEON — a separate element, not a rebuild of the halves — rises up
- *      from below into the space the tagline just vacated, at the same giant
- *      size v3's wordmark used.
- *   5. PANTHEON condenses into the real <h1>, exactly the manual
+ *      from below into the space the tagline just vacated, at the giant size
+ *      the wordmark has always used in the intro.
+ *   5. PANTHEON condenses into the real <h1>, the same manual
  *      measure-and-drive-down trick v3 used (Flip has nothing to match here:
  *      the giant word and the <h1> are different elements with different
- *      text), just aimed at one element instead of two halves.
+ *      text), aimed at one element instead of two halves.
  *
  * Entirely absent under prefers-reduced-motion (the overlay is
- * `display: none` in CSS, and no timeline is built) — that is now the only
- * way to bypass it.
+ * `display: none` in CSS, and no timeline is built) — that is the only way
+ * to bypass it, there is no skip button.
  */
 export function Hero() {
   const root = useRef<HTMLElement>(null);
@@ -175,28 +178,12 @@ export function Hero() {
           0.25,
         );
 
-        // --- 3. the tagline slides through the engraving -----------------
-        // One small drift-and-settle first — under `difference` this walks
-        // the inversion boundary across the bust's linework, the same beat
-        // v3 used, kept because it is what sells either half as passing
-        // through the plate rather than sitting on top of it.
-        tl.addLabel("through", "+=0.2");
-        tl.to(
-          halves[0],
-          { x: "-3.4vw", duration: 1, ease: "sine.inOut" },
-          "through",
-        ).to(
-          halves[1],
-          { x: "3.4vw", duration: 1, ease: "sine.inOut" },
-          "through",
-        );
-
-        // --- 4. part from the middle -------------------------------------
-        // The same two elements now leave for good: SIMULATE continues left
-        // off the stage, ANY REALITY continues right, both fading as they
-        // go. This is the literal "part from the middle" — the gap between
-        // them is what PANTHEON rises into next.
-        tl.addLabel("part", "through+=1");
+        // --- 3. part from the middle -------------------------------------
+        // A short hold once both halves are in, then they leave for good:
+        // SIMULATE continues left off the stage, ANY REALITY continues
+        // right, both fading as they go. This is the literal "part from the
+        // middle" — the gap between them is what PANTHEON rises into next.
+        tl.addLabel("part", "+=0.5");
         tl.to(
           halves[0],
           { x: "-42vw", opacity: 0, duration: 0.75, ease: "power2.in" },
@@ -207,7 +194,7 @@ export function Hero() {
           "part",
         );
 
-        // --- 5. PANTHEON comes up -----------------------------------------
+        // --- 4. PANTHEON comes up -----------------------------------------
         // A separate element, not a repurposing of the halves: it rises from
         // below into the space the tagline just vacated.
         tl.to(
@@ -216,7 +203,7 @@ export function Hero() {
           "part+=0.35",
         );
 
-        // --- 6. condense into the real hero -----------------------------
+        // --- 5. condense into the real hero -----------------------------
         // NOTE ON FLIP: GSAP's Flip plugin is genuinely available in this
         // install (3.15, real implementation in node_modules), but Flip
         // matches one element between two recorded states — here the giant
