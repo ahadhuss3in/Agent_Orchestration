@@ -616,24 +616,16 @@ section[id] {
 
 /* ------------------------------------------------------------
    Particle wordmark (Recap / footer finale)
+
+   Canvas now, not one <span> per dot — the density and the per-frame
+   cursor-repulsion physics this needs are well past where individual DOM
+   elements stay cheap. `touch-action: pan-y` keeps the canvas from
+   swallowing vertical scroll gestures on touch, since it has to accept
+   pointer events at all for the repulsion effect to see the pointer.
    ------------------------------------------------------------ */
 
-.pw-dots {
-  pointer-events: none;
-  /* `clip` rather than `hidden`: no scroll container, so nothing here can
-     ever contribute sideways scroll even mid-formation. */
-  overflow: clip;
-}
-
-/* Positioned by `left`/`top` at the sampled pixel coordinate; GSAP only ever
-   touches x/y/scale/opacity, so the target is always exactly (0,0) offset. */
-.pw-dot {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  margin: -2px 0 0 -2px;
-  border-radius: 999px;
-  will-change: transform;
+.pw-canvas {
+  touch-action: pan-y;
 }
 
 .pw-fallback {
@@ -1076,7 +1068,7 @@ html.js-motion .hero-block {
   .seed-flyer,
   .relay-flyer,
   .mitosis-layer,
-  .pw-dots,
+  .pw-canvas,
   .pw-seed {
     display: none !important;
   }
