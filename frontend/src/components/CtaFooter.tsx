@@ -1,12 +1,13 @@
-import { REPO_URL } from "@/lib/content";
 import { ParticleWordmark } from "./ParticleWordmark";
+import { WaitlistDialog } from "./WaitlistDialog";
 
 /**
  * Final CTA plus a minimal footer.
  *
- * Server component: nothing here animates or holds state except the particle
- * wordmark, which is its own client leaf. No fake logo wall, no invented
- * metrics, no signup flow behind the button.
+ * Server component: nothing here animates or holds state itself. The
+ * particle wordmark and the waitlist dialog are its two client leaves. No
+ * fake logo wall, no invented metrics — the waitlist is a real form posting
+ * to a real route (`/api/waitlist`), not a decorative button.
  *
  * This and the Recap row are the only two places `--grad-recap`'s Spectrum
  * sweep appears — it is the finale colour, not a fifth section accent.
@@ -54,28 +55,15 @@ export function CtaFooter() {
         {/*
           Two exits, ranked. The primary one is still the in-page walkthrough,
           because this page's job is to explain the engine. The ghost button
-          beside it is for the reader who has now finished the whole page and
-          wants the actual thing: it goes to the real repository, opens in a
-          new tab because it leaves the site, and carries `noopener` (which
-          severs `window.opener` on the new tab) and `noreferrer` alongside it.
-          The label names GitHub in words rather than relying on the glyph, and
-          a visually-hidden note says the tab is new, so a screen reader is not
-          silently navigated somewhere else.
+          beside it used to go to the real repository; it now opens the
+          waitlist dialog instead, for the reader who has finished the whole
+          page and wants to be told when there's something to actually try.
         */}
         <div className="mt-9 flex flex-wrap items-center gap-4">
           <a className="btn btn-primary" href="#seed">
             Walk through a seed end to end
           </a>
-          <a
-            className="btn btn-ghost"
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <span aria-hidden="true">&#8599;</span>
-            Read the source on GitHub
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
+          <WaitlistDialog />
         </div>
       </div>
 

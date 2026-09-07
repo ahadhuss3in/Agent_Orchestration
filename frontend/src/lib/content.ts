@@ -204,9 +204,6 @@ export const CHAT_MOCK: { from: "operator" | "agent"; text: string }[] = [
   },
 ];
 
-/** The project's own repository. Verified against this machine's `git remote`. */
-export const REPO_URL = "https://github.com/ahadhuss3in/Agent_Orchestration";
-
 /**
  * The FAQ near the foot of the page.
  *
@@ -246,9 +243,8 @@ export const FAQS: {
 }[] = [
   {
     q: "If I typed a seed into this page, would it actually run?",
-    a: "No. This page is a presentation of the engine, not a deployment of it. Nothing on it is bound to a backend: the seed in the Seed section is a fixed example rather than a field, and the chat panel further down is a labelled mock-up whose composer is deliberately not a focusable input, because a real one with nothing behind it would imply a request that is never sent. The engine itself is a separate set of services, and the code for it is public.",
+    a: "No. This page is a presentation of the engine, not a deployment of it. Nothing on it is bound to a backend: the seed in the Seed section is a fixed example rather than a field, and the chat panel further down is a labelled mock-up whose composer is deliberately not a focusable input, because a real one with nothing behind it would imply a request that is never sent. The engine itself is a separate set of services, run independently of this page.",
     jump: { href: "#seed", label: "See the seed step" },
-    ext: { href: REPO_URL, label: "Read the source on GitHub" },
   },
   {
     q: "What happens to entities I don't promote into agents?",

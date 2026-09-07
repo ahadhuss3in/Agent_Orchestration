@@ -163,6 +163,19 @@ html {
   scroll-behavior: smooth;
   background: var(--paper);
   color-scheme: dark;
+  /* The real fix for horizontal overflow, not `body`'s copy of this rule
+     below. `<html>`, not `<body>`, is the actual scrolling element in
+     standards mode — `body`'s `overflow-x: clip` only clips body's own
+     painted box, it does not stop `window.scrollBy`/a trackpad's horizontal
+     axis from moving the document if any descendant (a `position: fixed`
+     element with a scroll-linked transform, in this page's case) happens to
+     be laid out wider than the viewport at that instant. Confirmed by
+     testing: forcing `scrollBy({left: 500})` at one scroll position left
+     `scrollX` at 0 as expected, but doing the same at a different scroll
+     position — where the seed-flyer's live transform put it further off
+     -screen — actually moved the page sideways. Clipping here closes that
+     off regardless of any fixed element's momentary position. */
+  overflow-x: clip;
 }
 
 /* NO `background` HERE ON PURPOSE.
@@ -394,6 +407,38 @@ section[id] {
 .btn-ghost:hover {
   border-color: var(--ink);
   background: rgba(244, 244, 246, 0.06);
+}
+
+/* ------------------------------------------------------------
+   Waitlist dialog — a native <dialog>, so Escape-to-close, top-layer
+   stacking and focus containment come from the browser rather than a
+   hand-rolled modal. Only the UA chrome needs resetting: no default
+   border/padding/background, sized and centred by hand instead, and the
+   panel/bracketed classes on the element itself carry the actual look.
+   ------------------------------------------------------------ */
+
+.waitlist-dialog {
+  /* Centering a <dialog> is normally free — the UA stylesheet gives it
+     `position: fixed; inset: 0; margin: auto;` once shown via
+     `showModal()`. Tailwind's preflight resets `margin` to 0 on every
+     element including this one, which silently breaks that and docks the
+     dialog to the top-left instead — confirmed by screenshot, not assumed.
+     Restated explicitly here rather than fighting the cascade. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 0;
+  border: none;
+  max-width: min(440px, calc(100vw - 2.5rem));
+  max-height: calc(100vh - 3rem);
+  width: 100%;
+  height: fit-content;
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+.waitlist-dialog::backdrop {
+  background: rgba(4, 4, 6, 0.72);
 }
 
 /* ------------------------------------------------------------
