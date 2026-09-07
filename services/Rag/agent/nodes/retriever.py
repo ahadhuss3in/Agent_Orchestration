@@ -11,9 +11,17 @@ def retrieve_node(state: AgentState):
     """
     query = state["query"]
 
+    # absent for the general chatbot, so behavior there is unchanged; set
+    # for an agent chat, scopes retrieval to that agent's own seed/entity
+    qdrant_filter = state.get("qdrant_filter") or {}
+
     with logfire.span("Retrieving documents"):
         logfire.info(f"Searching DataBase for {query}")
-        results = search_enterprise_knowledge(query)
+        results = search_enterprise_knowledge(
+            query,
+            seed_id=qdrant_filter.get("seed_id"),
+            entity_id=qdrant_filter.get("entity_id"),
+        )
 
         # search_enterprise_knowledge hands back {"content", "source",
         # "score"} dicts, but rerank_documents only wants the raw passage

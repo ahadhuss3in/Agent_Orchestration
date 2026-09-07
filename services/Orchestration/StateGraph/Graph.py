@@ -6,6 +6,8 @@
 ### which entities become agents, then build_agent_profiles turns the pick
 ### into real AgentProfiles. A checkpointer is required for interrupt()/
 ### Command(resume=...) to work, so one is added at compile time here.
+### M19/M20: simulate runs every selected agent through a fixed number of
+### rounds, folding each round into a rolling summary.
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -16,6 +18,7 @@ from services.Orchestration.nodes.extract_entities import extract_entities
 from services.Orchestration.nodes.write_to_graph import write_to_graph
 from services.Orchestration.nodes.await_agent_selection import await_agent_selection
 from services.Orchestration.nodes.build_agent_profiles import build_agent_profiles
+from services.Orchestration.nodes.simulate import simulate
 
 graph = StateGraph(OrchestrationState)
 
@@ -25,6 +28,7 @@ graph.add_node("extract_entities", extract_entities)
 graph.add_node("write_to_graph", write_to_graph)
 graph.add_node("await_agent_selection", await_agent_selection)
 graph.add_node("build_agent_profiles", build_agent_profiles)
+graph.add_node("simulate", simulate)
 
 
 def route_after_intake(state: OrchestrationState):
@@ -50,6 +54,7 @@ graph.add_edge("fetch_context", "extract_entities")
 graph.add_edge("extract_entities", "write_to_graph")
 graph.add_edge("write_to_graph", "await_agent_selection")
 graph.add_edge("await_agent_selection", "build_agent_profiles")
-graph.add_edge("build_agent_profiles", END)
+graph.add_edge("build_agent_profiles", "simulate")
+graph.add_edge("simulate", END)
 
 orchestration_agent = graph.compile(checkpointer=MemorySaver())

@@ -23,11 +23,13 @@ def generate_node(state:AgentState):
             history += f"{role}:{msg.content}\n"
 
     user_message = state["messages"][-1].content if state["messages"] else ""
+    # absent for the general chatbot, defaults to today's exact persona
+    persona = state.get("persona") or "You are a friendly and helpful Enterprise AI Assistant."
 
     if query == "CONVERSATIONAL":
         logfire.info("Generating conversational response using memory.")
         prompt = f"""
-        You are a friendly and helpful Enterprise AI Assistant.
+        {persona}
         Answer the user's latest message using the CONVERSATION HISTORY below.
 
         CONVERSATION HISTORY:
@@ -52,8 +54,9 @@ def generate_node(state:AgentState):
                 logfire.warning("Context truncated to fit Groq TPM limits.")
                 break
 
+        technical_persona = state.get("persona") or "You are a Senior Technical Architect."
         prompt = f"""
-        You are a Senior Technical Architect.
+        {technical_persona}
         Answer the question using the TECHNICAL CONTEXT provided.
 
         TECHNICAL CONTEXT:

@@ -24,3 +24,10 @@ class OrchestrationState(TypedDict):
     selected_agent_ids: List[str]
     # one AgentProfile per selected_agent_id, keyed by agent_id (== entity_id).
     agents: Dict[str, dict]
+    # M19/M20: how many rounds to run, defaults set by intake if absent.
+    max_rounds: int
+    # every turn any agent has taken, in order: {round, agent_id, action_type, content}
+    simulation_log: List[dict]
+    # rolling summary, folded after every round so prompt size stays bounded
+    # no matter how many rounds run
+    shared_scenario_summary: str

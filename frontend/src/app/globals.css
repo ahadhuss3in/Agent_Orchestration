@@ -1,0 +1,575 @@
+@import "tailwindcss";
+
+/* ============================================================
+   PANTHEON — design tokens
+   Light only. No dark mode. (v2: the whole dark palette from v1
+   is gone, including every violet/purple token.)
+
+   CONTRAST AUDIT — recomputed from scratch for the light surfaces
+   (WCAG 2.1 relative luminance, not eyeballed):
+
+     --paper        #ffffff  L = 1.00000
+     --paper-raised #f5f5f7  L = 0.91434
+     --ink          #0b0b10  L = 0.00348
+     --ink-dim      #5b5b68  L = 0.10705
+
+     --ink     on --paper        = 19.6 : 1
+     --ink     on --paper-raised = 18.0 : 1
+     --ink-dim on --paper        =  6.7 : 1
+     --ink-dim on --paper-raised =  6.1 : 1
+
+   So the briefed --ink-dim ships unmodified; it clears 4.5:1 on
+   both surfaces with room to spare.
+
+   THE VIVID GRADIENT PAIRS ARE NOT TEXT COLOURS. Measured against
+   --paper they land at:
+     #ff6a3d 2.85   #e6265a 4.37
+     #00c2d1 2.18   #2f6bff 4.50
+     #f2b705 1.83   #ff8a3d 2.36
+     #00c27a 2.33   #00e2b8 1.62
+     #38bdf8 2.16
+   Most fail even the 3:1 large-text floor, so they are used ONLY
+   for strokes, fills, rules, glows and decorative SVG. Section
+   headlines stay --ink and take their identity from a gradient
+   rule + gradient underline instead of gradient text. The single
+   exception is the intro wordmark, which is aria-hidden decoration
+   duplicated by the real <h1> underneath it.
+
+   For small accent text inside a section (hud labels, persona
+   roles) each gradient gets a deepened "ink" variant, all of which
+   were computed to clear 4.5:1 on BOTH light surfaces:
+     --ink-ignis  #c2320f  5.6 / 5.1
+     --ink-signal #0e6d9e  5.6 / 5.2
+     --ink-aurum  #8a5a00  5.6 / 5.2
+     --ink-pulse  #056b4a  6.5 / 6.0
+     --ink-wire   #1a52d6  6.5 / 6.0
+
+   Hue check against the "no violet/purple, roughly 260-300deg"
+   rule — every colour introduced here:
+     #ff6a3d 16   #e6265a 344  #c2320f 12
+     #00c2d1 187  #2f6bff 223  #0e6d9e 200
+     #f2b705 45   #ff8a3d 24   #8a5a00 39
+     #00c27a 158  #00e2b8 168  #056b4a 154
+     #38bdf8 198  #1a52d6 222  #b3123f 343
+   Nothing lands in 260-300.
+   ============================================================ */
+
+:root {
+  --paper: #ffffff;
+  --paper-raised: #f5f5f7;
+  --ink: #0b0b10;
+  --ink-dim: #5b5b68;
+  --line: rgba(11, 11, 16, 0.12);
+  --line-strong: rgba(11, 11, 16, 0.22);
+
+  /* --- per-section two-stop gradients --- */
+  --grad-seed-a: #ff6a3d;
+  --grad-seed-b: #e6265a;
+  --grad-graph-a: #00c2d1;
+  --grad-graph-b: #2f6bff;
+  --grad-agents-a: #f2b705;
+  --grad-agents-b: #ff8a3d;
+  --grad-sim-a: #00c27a;
+  --grad-sim-b: #00e2b8;
+  --grad-chat-a: #2f6bff;
+  --grad-chat-b: #38bdf8;
+  --grad-recap: linear-gradient(90deg, #ff6a3d, #f2b705, #00c27a, #2f6bff);
+
+  /* Text-safe deepened variants. See audit above. */
+  --ink-ignis: #c2320f;
+  --ink-signal: #0e6d9e;
+  --ink-aurum: #8a5a00;
+  --ink-pulse: #056b4a;
+  --ink-wire: #1a52d6;
+
+  /* Section-local identity. Overridden by the .sec-* classes below so
+     every shared component (rules, brackets, panels, glows) picks up
+     whichever section it happens to be sitting in. Defaults to Ignition
+     because the hero is the first thing on the page. */
+  --ga: var(--grad-seed-a);
+  --gb: var(--grad-seed-b);
+  --gink: var(--ink-ignis);
+
+  --rail-w: 88px;
+}
+
+.sec-seed {
+  --ga: var(--grad-seed-a);
+  --gb: var(--grad-seed-b);
+  --gink: var(--ink-ignis);
+}
+.sec-graph {
+  --ga: var(--grad-graph-a);
+  --gb: var(--grad-graph-b);
+  --gink: var(--ink-signal);
+}
+.sec-agents {
+  --ga: var(--grad-agents-a);
+  --gb: var(--grad-agents-b);
+  --gink: var(--ink-aurum);
+}
+.sec-sim {
+  --ga: var(--grad-sim-a);
+  --gb: var(--grad-sim-b);
+  --gink: var(--ink-pulse);
+}
+.sec-chat {
+  --ga: var(--grad-chat-a);
+  --gb: var(--grad-chat-b);
+  --gink: var(--ink-wire);
+}
+.sec-recap {
+  --ga: #ff6a3d;
+  --gb: #2f6bff;
+  --gink: var(--ink-signal);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-dim: var(--ink-dim);
+  --color-line: var(--line);
+  --color-accent: var(--gink);
+
+  --font-display: var(--font-orbitron), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ------------------------------------------------------------
+   Base
+   ------------------------------------------------------------ */
+
+html {
+  scroll-behavior: smooth;
+  background: var(--paper);
+  color-scheme: light;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  /* `clip` rather than `hidden`: it kills sideways overflow without
+     creating a scroll container, which would break ScrollTrigger pins. */
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+section[id] {
+  scroll-margin-top: 4rem;
+}
+
+/* ------------------------------------------------------------
+   Focus — never removed, only replaced
+   ------------------------------------------------------------ */
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 200;
+  padding: 0.75rem 1.25rem;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  transition: top 0.18s ease;
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* ------------------------------------------------------------
+   Type
+   ------------------------------------------------------------ */
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.display-sm {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.hud-label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+/* The section's identity mark: a short two-stop bar above the headline. */
+.stage-rule {
+  display: block;
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--ga), var(--gb));
+}
+
+/* Gradient underline under a headline. The text itself stays --ink, so
+   contrast is 19.6:1 and the colour is carried by the rule instead. */
+.grad-underline {
+  position: relative;
+  display: inline;
+  background-image: linear-gradient(90deg, var(--ga), var(--gb));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 0.14em;
+  padding-bottom: 0.06em;
+}
+
+/* Decorative only — used for the giant intro wordmark, which is
+   aria-hidden and duplicated by the real <h1>.
+
+   NOTE: `background-clip: text` paints through the element's OWN text, so
+   anything wearing this class must keep its text intact. Running SplitText
+   over one of these renders it as a solid slab with the letters knocked out.
+   The intro halves animate as whole blocks for exactly this reason. */
+.grad-text {
+  background-image: linear-gradient(100deg, var(--ga), var(--gb));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The wordmark is two elements so each half can be shoved independently, but
+   it has to read as one word: each half carries a double-width gradient
+   anchored to its own side, so the sweep runs continuously across the seam
+   instead of restarting at the "T". */
+.intro-half {
+  background-size: 200% 100%;
+}
+.intro-half:first-child {
+  background-position: 0% 0;
+}
+.intro-half:last-child {
+  background-position: 100% 0;
+}
+
+/* ------------------------------------------------------------
+   Panels — on white, "glow" is a soft colour-tinted blur shadow at
+   low opacity, never a neon text-shadow. Ported straight from the
+   dark theme this would have looked broken.
+   ------------------------------------------------------------ */
+
+.panel {
+  position: relative;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.panel-glow {
+  box-shadow:
+    0 1px 2px rgba(11, 11, 16, 0.04),
+    0 18px 44px -30px color-mix(in srgb, var(--ga) 70%, transparent),
+    0 6px 18px -14px color-mix(in srgb, var(--gb) 45%, transparent);
+}
+
+/* A 2px gradient hairline along the top edge of a card. */
+.panel-topline::before {
+  content: "";
+  position: absolute;
+  inset: -1px -1px auto -1px;
+  height: 3px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(90deg, var(--ga), var(--gb));
+  pointer-events: none;
+}
+
+/* Targeting-reticle corner ticks, tinted by the owning section. */
+.bracketed::before,
+.bracketed::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.bracketed::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--ga);
+  border-left: 2px solid var(--ga);
+}
+.bracketed::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--gb);
+  border-right: 2px solid var(--gb);
+}
+
+/* ------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.95rem 1.6rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+/* White on #c2320f = 5.6:1, white on #b3123f = 6.8:1. Both clear 4.5:1
+   across the whole sweep, which the briefed #ff6a3d (2.9:1) would not. */
+.btn-primary {
+  color: #ffffff;
+  background: linear-gradient(110deg, #c2320f, #b3123f);
+  border-color: transparent;
+  box-shadow: 0 16px 34px -22px rgba(194, 50, 15, 0.85);
+}
+.btn-primary:hover {
+  background: linear-gradient(110deg, #a92a0a, #9c0f36);
+  box-shadow: 0 18px 38px -18px rgba(194, 50, 15, 0.9);
+}
+
+.btn-ghost {
+  color: var(--ink);
+  background: var(--paper);
+  border-color: var(--line-strong);
+}
+.btn-ghost:hover {
+  border-color: var(--ink);
+  box-shadow: 0 12px 30px -24px rgba(11, 11, 16, 0.6);
+}
+
+/* ------------------------------------------------------------
+   Ambient motion. Paused unless the owning section is on screen.
+   ------------------------------------------------------------ */
+
+.ambient {
+  animation-play-state: paused;
+}
+.in-view .ambient {
+  animation-play-state: running;
+}
+
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ga) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--ga) 0%, transparent);
+  }
+}
+
+.caret {
+  animation: caret-blink 1s step-end infinite;
+}
+
+.live-dot {
+  animation: live-pulse 2.2s ease-out infinite;
+}
+
+/* ------------------------------------------------------------
+   Faint construction grid — hero only, masked so it dissolves
+   ------------------------------------------------------------ */
+
+.grid-field {
+  background-image:
+    linear-gradient(to right, rgba(11, 11, 16, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(11, 11, 16, 0.05) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 70% at 60% 35%,
+    #000 0%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    ellipse 90% 70% at 60% 35%,
+    #000 0%,
+    transparent 78%
+  );
+}
+
+/* Soft section wash: the gradient at very low opacity behind the content,
+   so each section reads as its own colour without tinting any text. */
+.sec-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.075;
+  background: radial-gradient(
+    ellipse 70% 55% at var(--wash-x, 78%) var(--wash-y, 26%),
+    var(--ga) 0%,
+    var(--gb) 42%,
+    transparent 72%
+  );
+}
+
+/* ------------------------------------------------------------
+   Particle wordmark (Recap / footer finale)
+   ------------------------------------------------------------ */
+
+.pw-dots {
+  pointer-events: none;
+  /* `clip` rather than `hidden`: no scroll container, so nothing here can
+     ever contribute sideways scroll even mid-formation. */
+  overflow: clip;
+}
+
+/* Positioned by `left`/`top` at the sampled pixel coordinate; GSAP only ever
+   touches x/y/scale/opacity, so the target is always exactly (0,0) offset. */
+.pw-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 999px;
+  will-change: transform;
+}
+
+.pw-fallback {
+  transition: none;
+}
+
+/* SplitText line wrapper that must NOT clip — the Chat blur reveal needs the
+   blur to spill outside the line box. */
+.split-line-open {
+  display: block;
+}
+
+/* ------------------------------------------------------------
+   SplitText helpers
+   ------------------------------------------------------------ */
+
+.split-line {
+  overflow: hidden;
+  display: block;
+}
+
+/* ------------------------------------------------------------
+   Load-time state.
+
+   The markup's default is always the FINISHED state, so with JS off,
+   with GSAP failing to load, or under prefers-reduced-motion, the page
+   is fully legible. `js-motion` is added by a tiny inline script in
+   <head> only when motion is allowed, purely to avoid a one-frame flash
+   of the hero before the intro takes over. It self-clears after 8s as a
+   dead-man switch, and the intro timeline clears it on completion.
+   ------------------------------------------------------------ */
+
+.intro-overlay {
+  opacity: 0;
+  visibility: hidden;
+}
+
+html.js-motion .intro-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+html.js-motion .hero-block {
+  opacity: 0;
+}
+
+/* The traveling seed is a desktop-motion-only device. It is created
+   hidden and only revealed by the journey timeline. */
+.seed-flyer {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------
+   Reduced motion — belt and braces.
+   Every timeline is gated behind gsap.matchMedia(), but this catches
+   anything CSS-driven and anything that runs before JS boots.
+   ------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The giant load-in is a motion-only flourish. It never appears. */
+  .intro-overlay {
+    display: none !important;
+  }
+
+  /* No fixed traveling orb, no mitosis shards, no particle field. */
+  .seed-flyer,
+  .mitosis-layer,
+  .pw-dots {
+    display: none !important;
+  }
+
+  /* Anything a timeline would have revealed stays at its final state. */
+  .reveal-target,
+  .hero-block,
+  .seed-line,
+  .persona-figure,
+  .pw-fallback {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    visibility: visible !important;
+  }
+
+  .edge-path {
+    stroke-dashoffset: 0 !important;
+  }
+
+  /* With no pin there is nothing to scrub through, so the stage does not
+     need to reserve a full viewport of empty height. */
+  .sim-stage {
+    min-height: 0;
+  }
+}

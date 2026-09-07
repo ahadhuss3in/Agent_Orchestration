@@ -83,6 +83,47 @@ def write_entities(seed_id: str, seed_text: str, entities: list[dict], relations
         )
 
 
+def get_relationships(entity_id: str) -> list[dict]:
+    """
+    Every relationship touching one entity, in either direction, excluding
+    the structural PARTICIPATED_IN edge to the Seed node itself, that's
+    bookkeeping, not a fact about the scenario.
+    """
+    with driver.session() as session:
+        result = session.run(
+            """
+            MATCH (e {entity_id: $entity_id})-[r]-(other)
+            WHERE NOT other:Seed
+            RETURN type(r) AS rel_type,
+                   other.entity_id AS other_id,
+                   other.name AS other_name,
+                   r.description AS description,
+                   startNode(r).entity_id = $entity_id AS outgoing
+            """,
+            entity_id=entity_id,
+        )
+        return [dict(record) for record in result]
+
+
+def format_relationships(entity_id: str) -> str:
+    """
+    Turns get_relationships() into a plain text block, the same shape as
+    generate_node's own "TECHNICAL CONTEXT" block, ready to drop straight
+    into a prompt.
+    """
+    relationships = get_relationships(entity_id)
+    if not relationships:
+        return "No known relationships."
+
+    lines = []
+    for rel in relationships:
+        if rel["outgoing"]:
+            lines.append(f"- {rel['rel_type']} -> {rel['other_name']}: {rel['description']}")
+        else:
+            lines.append(f"- {rel['other_name']} -> {rel['rel_type']} -> you: {rel['description']}")
+    return "\n".join(lines)
+
+
 def count_nodes_for_seed(seed_id: str) -> int:
     """How many non-Seed nodes exist for one seed. Used to prove writes
     are idempotent, this number should not grow on a second identical run.

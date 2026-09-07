@@ -4,13 +4,13 @@
 ## connecting akk the components
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from services.Rag.agent.StateGraph.RagState import AgentState
+from services.Rag.agent.StateGraph.RagState import AgentChatState
 from services.Rag.agent.nodes.planner import planned_node
 from services.Rag.agent.nodes.responder import generate_node
 from services.Rag.agent.nodes.retriever import retrieve_node
 
 ## Initialize the graph
-graph = StateGraph(AgentState)
+graph = StateGraph(AgentChatState)
 
 
 ## define what are the nodes of the graph
@@ -19,7 +19,7 @@ graph.add_node("retriever", retrieve_node)
 graph.add_node("generate_res", generate_node)
 
 
-def route_planner(state:AgentState):
+def route_planner(state:AgentChatState):
     """
     routes the workflow based on the planners decision
     """
