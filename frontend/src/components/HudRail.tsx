@@ -132,11 +132,12 @@ export function HudRail() {
                     style={
                       isActive
                         ? {
-                            // Vivid gradient for identity, plus a dark hairline
-                            // so the marker's own edge still has a legible
-                            // boundary against the light panel behind it.
+                            // Vivid gradient for identity. On black the lift
+                            // is a soft glow of the marker's own colour rather
+                            // than v2's dark drop shadow, which would have been
+                            // invisible against the rail.
                             background: MARKER[stage.id],
-                            boxShadow: "0 6px 16px -8px rgba(11,11,16,0.45)",
+                            boxShadow: "0 0 12px -1px rgba(244, 244, 246, 0.4)",
                           }
                         : isDone
                           ? { background: MARKER[stage.id], opacity: 0.4 }

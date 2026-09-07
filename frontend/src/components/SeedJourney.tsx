@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { gsap, ScrollTrigger, JOURNEY_QUERIES } from "@/lib/gsap";
+import { gsap, JOURNEY_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
 import { bodyLineReveal, maskWipe } from "@/lib/textAnim";
 import { useInViewClass } from "@/lib/useInViewClass";
@@ -12,6 +12,42 @@ import { GraphSection } from "./GraphSection";
 
 /** Matches the desktop HUD rail width. Keep in sync with `--rail-w`. */
 const RAIL_W = 88;
+
+/**
+ * How far above itself the sigil starts pulling on a target, as a fraction of
+ * the viewport height, with a px floor for short windows. Wide enough that the
+ * pull is a visible glide rather than a snap; narrow enough that only one of
+ * the 46vh-spaced story lines is ever mid-swallow.
+ */
+const CAPTURE_VH = 0.24;
+const CAPTURE_MIN = 150;
+
+/** Classic smoothstep. Continuous, and flat at both ends so nothing pops. */
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * One thing the traveling sigil can eat.
+ *
+ * Two elements, never one. `measure` is the element whose position is read and
+ * is guaranteed never to be transformed; `move` is the element the swallow
+ * writes to. Reading a rect off an element you are also displacing would feed
+ * the displacement back into the next frame's distance and the swallow would
+ * accelerate into itself.
+ */
+type SwallowTarget = {
+  measure: HTMLElement;
+  move: HTMLElement;
+  /** Last amount actually written, so identical frames are skipped. */
+  amount: number;
+  /**
+   * The scrub progress at which this target first reached amount 1. While the
+   * progress is at or past this point the target is fully inside the sigil and
+   * is neither measured nor written — that is the whole cost saving. The
+   * moment the progress falls back below it, on reverse scroll, it re-enters
+   * the loop and un-swallows through the same continuous function.
+   */
+  lockedAt: number | null;
+};
 
 /**
  * Client feedback #5 — the seed follows you down the page, eats the story
@@ -31,12 +67,12 @@ const RAIL_W = 88;
  *      sigil swings in from off-screen right, then descends from 26vh to
  *      70vh while drifting slightly inward, so it visibly travels down the
  *      page in step with the scrollbar.
- *   3. Each story line gets its own ordinary (non-scrubbed) ScrollTrigger.
- *      When one fires it reads the flyer's live rect and tweens the line
- *      into that exact point at scale 0 — so the line is pulled into the
- *      passing sigil and vanishes. Reading the live rect rather than
- *      recomputing the predicted coordinate means the two never drift apart,
- *      whatever the viewport height.
+ *   3. THE SWALLOW. Inside that same onUpdate, every target that is not
+ *      already fully eaten is measured against the sigil's live centre and
+ *      given a continuous 0->1 amount, which is written straight to its
+ *      transform. Targets are the section heading, the seed input card, and
+ *      every story line. See `applySwallow` for why this replaced the
+ *      per-line trigger it used to be.
  *   4. Past 84% the same driver lerps the sigil onto the graph's central
  *      node — measured live, which on this layout is the horizontal centre
  *      of the viewport — matching its scale as it goes.
@@ -85,6 +121,7 @@ export function SeedJourney() {
         const flyerInner = q<HTMLElement>(".seed-flyer-inner");
         const inlineOrb = q<HTMLElement>(".seed-inline-orb");
         const lines = qa<HTMLElement>(".seed-line");
+        const lineTexts = qa<HTMLElement>(".seed-line-text");
         const nodes = qa<SVGGElement>(".gnode");
         const edges = qa<SVGLineElement>(".edge-path");
         const seedHeading = q<HTMLElement>(".seed-heading");
@@ -98,7 +135,12 @@ export function SeedJourney() {
 
         // ---------------- reduced motion ----------------
         if (reduced) {
-          gsap.set([lines, nodes, graphOrb], { opacity: 1, scale: 1, x: 0, y: 0 });
+          gsap.set([lines, lineTexts, nodes, graphOrb], {
+            opacity: 1,
+            scale: 1,
+            x: 0,
+            y: 0,
+          });
           gsap.set(edges, { strokeDashoffset: 0, opacity: 1 });
           if (inlineOrb) gsap.set(inlineOrb, { opacity: 1 });
           baseReveal(s, true);
@@ -159,9 +201,11 @@ export function SeedJourney() {
         if (!wide) {
           if (inlineOrb) gsap.set(inlineOrb, { opacity: 1 });
           gsap.set(graphOrb, { opacity: 1 });
-          gsap.set(lines, { opacity: 0, y: 26 });
-          lines.forEach((line) => {
-            gsap.to(line, {
+          gsap.set(lineTexts, { opacity: 0, y: 26 });
+          lines.forEach((line, i) => {
+            const text = lineTexts[i];
+            if (!text) return;
+            gsap.to(text, {
               opacity: 1,
               y: 0,
               duration: 0.7,
@@ -191,6 +235,48 @@ export function SeedJourney() {
         };
         measure();
 
+        // ---------------- what the sigil can eat ----------------
+        //
+        // WHY THIS IS NOT A SET OF TRIGGERS ANY MORE.
+        //
+        // v2 gave every story line its own `ScrollTrigger.create({ start:
+        // "center 52%", once: true })`, and 52% was a hand-guess at where the
+        // sigil "usually" is. But the sigil's y is `vh * lerp(0.26, 0.7, run)`
+        // where `run` is a clamped remap of the scrub progress — a nonlinear
+        // function of scroll, re-evaluated every frame, with the sigil ranging
+        // over 44% of the viewport across the run. A fixed 52% line can only
+        // agree with that at one instant. Everywhere else the trigger fired
+        // while the sigil was somewhere else entirely, which is the reported
+        // "the line only goes in after the seed has already passed it". And
+        // `once: true` on a one-shot `.to()` meant scrolling back up left the
+        // line gone forever.
+        //
+        // Both bugs have the same root: the decision lived somewhere the
+        // sigil's real position was not known. So it moved in here, next to
+        // the code that computes that position. Each frame every live target
+        // is measured against the sigil's actual centre and gets a continuous
+        // amount, which is written directly rather than tweened. Reversal is
+        // not implemented anywhere — it simply falls out of the amount being a
+        // pure function of two live positions, and ScrollTrigger already
+        // scrubs the progress backwards.
+        const swallow: SwallowTarget[] = [];
+        const addTarget = (
+          measureEl: HTMLElement | null,
+          moveEl: HTMLElement | null,
+        ) => {
+          if (measureEl && moveEl) {
+            swallow.push({ measure: measureEl, move: moveEl, amount: -1, lockedAt: null });
+          }
+        };
+        addTarget(q<HTMLElement>(".seed-heading-wrap"), q<HTMLElement>(".seed-heading"));
+        addTarget(q<HTMLElement>(".seed-card-wrap"), q<HTMLElement>(".seed-card-move"));
+        lines.forEach((line) =>
+          addTarget(line, line.querySelector<HTMLElement>(".seed-line-move")),
+        );
+
+        /** Reads for one frame, produced before anything is written. */
+        type Pending = { t: SwallowTarget; a: number; dx: number; dy: number };
+
         const place = (p: number) => {
           const vw = window.innerWidth;
           const vh = window.innerHeight;
@@ -207,6 +293,11 @@ export function SeedJourney() {
           let y = vh * lerp(0.26, 0.7, run);
           let scale = 1;
 
+          // ---- READS ----
+          // Every measurement for this frame happens before any write, so the
+          // rect reads below cannot be interleaved with style writes and force
+          // a fresh layout per target.
+
           // Converge on the graph's central node, measured live.
           const posT = clamp01((p - 0.84) / 0.12);
           if (posT > 0) {
@@ -216,12 +307,64 @@ export function SeedJourney() {
             scale = lerp(1, scaleMatch, posT);
           }
 
-          // Crossfade into the graph's own orb at the same coordinate.
+          const capture = Math.max(CAPTURE_MIN, vh * CAPTURE_VH);
+          const pending: Pending[] = [];
+          let peak = 0;
+
+          for (const t of swallow) {
+            // Settled inside the sigil and the scroll has not come back for
+            // it: no rect read, no write.
+            if (t.lockedAt !== null && p >= t.lockedAt) continue;
+
+            const r = t.measure.getBoundingClientRect();
+            const tx = r.left + r.width / 2;
+            const ty = r.top + r.height / 2;
+
+            // Signed, not absolute. Positive means the target is still below
+            // the sigil and has not been reached; zero means the sigil's
+            // centre is level with it; negative means the sigil has moved past
+            // it and the target stays eaten. An absolute distance would spit
+            // every line back out the far side as the sigil carried on down.
+            const d = ty - y;
+            const a = smoothstep(clamp01((capture - d) / capture));
+
+            pending.push({ t, a, dx: x - tx, dy: y - ty });
+            // Peaks at a = 0.5, so the sigil pulses hardest mid-gulp and is
+            // back at rest whether the target is untouched or fully absorbed.
+            peak = Math.max(peak, 4 * a * (1 - a));
+          }
+
+          // ---- WRITES ----
           const fadeT = clamp01((p - 0.94) / 0.06);
           const visible = entry > 0.02 ? 1 : 0;
 
           gsap.set(flyer, { x, y, scale, opacity: visible * (1 - fadeT) });
           gsap.set(graphOrb, { opacity: fadeT });
+          // The pulse lands on the inner wrapper so it cannot fight the outer
+          // element's transform, which `place()` owns.
+          gsap.set(flyerInner, { scale: 1 + 0.16 * peak });
+
+          for (const { t, a, dx, dy } of pending) {
+            // Latched before the no-op check, not after: a target that is
+            // already at 1 and stays at 1 still has to record the lower
+            // progress so the skip test above keeps tightening as the scroll
+            // moves on. Recording it after the early-continue left the latch
+            // stale and the target measured on every remaining frame.
+            t.lockedAt = a >= 1 ? p : null;
+            if (a === t.amount) continue;
+            t.amount = a;
+            gsap.set(t.move, {
+              x: dx * a,
+              y: dy * a,
+              scale: 1 - 0.96 * a,
+              // Held at full strength through the first half of the pull so
+              // the element is visibly travelling, then taken out over the
+              // back half rather than fading in place.
+              opacity: 1 - clamp01((a - 0.45) / 0.5),
+              transformOrigin: "50% 50%",
+              force3D: true,
+            });
+          }
         };
 
         const driver = { p: 0 };
@@ -236,67 +379,45 @@ export function SeedJourney() {
             scrub: 0.5,
             invalidateOnRefresh: true,
             onRefreshInit: measure,
+            // A refresh can move every anchor (fonts swapping, the intro
+            // overlay releasing the scroll lock). Re-placing from the current
+            // progress re-derives every amount from the new geometry.
+            onRefresh: () => place(driver.p),
           },
           onUpdate: () => place(driver.p),
         });
         place(0);
 
         // ---------------- lines: revealed, then eaten ----------------
-        gsap.set(lines, { opacity: 0, y: 30 });
-        const lineTweens: gsap.core.Tween[] = [];
-
-        lines.forEach((line) => {
-          lineTweens.push(
-            gsap.to(line, {
+        // The entrance is still an ordinary one-shot reveal and still lives on
+        // its own element — `.seed-line-text`, inside the element the swallow
+        // moves. Two animations, two nodes, no overwrite fight.
+        gsap.set(lineTexts, { opacity: 0, y: 30 });
+        const lineTweens = lines
+          .map((line, i) => {
+            const text = lineTexts[i];
+            if (!text) return null;
+            return gsap.to(text, {
               opacity: 1,
               y: 0,
               duration: 0.75,
               ease: "power3.out",
               scrollTrigger: { trigger: line, start: "top 84%", once: true },
-            }),
-          );
-
-          ScrollTrigger.create({
-            trigger: line,
-            // Tuned against `place()`: over the story run the sigil sits
-            // between 30vh and 65vh, so a line whose centre has reached ~52%
-            // of the viewport is level with it.
-            start: "center 52%",
-            once: true,
-            onEnter: () => {
-              const f = flyer.getBoundingClientRect();
-              const r = line.getBoundingClientRect();
-              gsap.to(line, {
-                x: f.left + f.width / 2 - (r.left + r.width / 2),
-                y: f.top + f.height / 2 - (r.top + r.height / 2),
-                scale: 0,
-                opacity: 0,
-                duration: 0.9,
-                ease: "power2.in",
-                overwrite: "auto",
-              });
-              // The swallow lands on an inner wrapper so it cannot fight
-              // `place()`, which owns the outer element's transform.
-              gsap.fromTo(
-                flyerInner,
-                { scale: 1 },
-                {
-                  scale: 1.14,
-                  duration: 0.22,
-                  delay: 0.6,
-                  yoyo: true,
-                  repeat: 1,
-                  ease: "power2.out",
-                },
-              );
-            },
-          });
-        });
+            });
+          })
+          .filter(Boolean) as gsap.core.Tween[];
 
         return () => {
           travel.kill();
           lineTweens.forEach((t) => t.kill());
           graphTl.kill();
+          // `gsap.set` calls made inside onUpdate run long after the
+          // matchMedia context finished recording, so the context cannot
+          // revert them. Cleared by hand.
+          gsap.set(
+            swallow.map((t) => t.move),
+            { clearProps: "transform,opacity" },
+          );
           cleanups.forEach((c) => c());
         };
       });

@@ -191,12 +191,15 @@ export function Orb({
           <stop offset="100%" stopColor="var(--grad-seed-b)" />
         </linearGradient>
 
-        {/* On white a "glow" is a soft, low-opacity colour wash. A neon
-            text-shadow ported from the dark theme would read as a rendering
-            fault here. */}
+        {/* v2 kept this almost invisible because on a white page a coloured
+            halo read as a rendering fault. On black the reasoning inverts —
+            a sigil this size with no atmosphere around it looks cut out — so
+            the stops come up. Deliberately still a soft wash and not a neon
+            bloom: the page is black, white and the accent family, not the
+            cyberpunk look that was rejected earlier. */}
         <radialGradient id={halo} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--grad-seed-a)" stopOpacity="0.30" />
-          <stop offset="48%" stopColor="var(--grad-seed-b)" stopOpacity="0.12" />
+          <stop offset="0%" stopColor="var(--grad-seed-a)" stopOpacity="0.42" />
+          <stop offset="48%" stopColor="var(--grad-seed-b)" stopOpacity="0.18" />
           <stop offset="100%" stopColor="var(--grad-seed-b)" stopOpacity="0" />
         </radialGradient>
       </defs>

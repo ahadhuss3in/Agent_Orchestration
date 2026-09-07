@@ -38,14 +38,28 @@ export function SeedSection() {
         <div className="max-w-[62ch]">
           <span className="stage-rule reveal-target mb-8" aria-hidden="true" />
 
-          <h2
-            id="seed-heading"
-            className="seed-heading display-sm max-w-[17ch] text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
-          >
-            It starts with{" "}
-            <span className="grad-underline">one moment</span> you typed in
-            yourself.
-          </h2>
+          {/*
+            MEASUREMENT ANCHOR / MOVED ELEMENT.
+
+            The wrapper is never transformed, so the journey controller can
+            read its honest on-screen position every frame; the <h2> inside is
+            what gets pulled into the sigil. Measuring the same element you are
+            displacing would feed the displacement straight back into the
+            distance calculation and the swallow would chase itself.
+          */}
+          {/* The width cap lives on the wrapper, not the <h2>, so the anchor
+              box and the moved box are exactly the same rectangle and the
+              measured centre is the heading's real centre. */}
+          <div className="seed-heading-wrap max-w-[17ch]">
+            <h2
+              id="seed-heading"
+              className="seed-heading display-sm text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
+            >
+              It starts with{" "}
+              <span className="grad-underline">one moment</span> you typed in
+              yourself.
+            </h2>
+          </div>
 
           <p className="seed-body mt-7 font-mono text-[15px] leading-relaxed text-ink-dim">
             Pantheon takes it as plain text and nothing else. If the moment is
@@ -56,8 +70,12 @@ export function SeedSection() {
         </div>
 
         {/* ---- the seed as it was typed ---- */}
-        <div className="seed-card-wrap reveal-target mt-12 max-w-[680px]">
-          <article className="panel panel-glow bracketed p-6 sm:p-8">
+        {/* Same anchor / moved-element split as the heading. `reveal-target`
+            sits on the <article> rather than the outer wrapper so the entrance
+            fade and the swallow transform are never writing to one node. */}
+        <div className="seed-card-wrap mt-12 max-w-[680px]">
+          <div className="seed-card-move">
+            <article className="panel panel-glow bracketed reveal-target p-6 sm:p-8">
             <span className="hud-label text-[color:var(--ink-ignis)]">
               SEED / INPUT
             </span>
@@ -82,19 +100,28 @@ export function SeedSection() {
               <span className="text-[color:var(--ink-ignis)]">next</span>{" "}
               extraction
             </p>
-          </article>
+            </article>
+          </div>
         </div>
 
         {/* ---- the run the sigil travels down ---- */}
         <div className="relative mt-20 grid gap-0 lg:mt-28 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
           <ol className="seed-lines">
             {SEED_LINES.map((line) => (
+              // Three nested elements, one job each: the <li> is the
+              // measurement anchor and holds the layout runway, the middle
+              // span is what the swallow transforms, the inner span is what
+              // the entrance reveal fades up. `items-center` on a min-height
+              // box means the <li>'s centre and the text's centre are the same
+              // point, so measuring the anchor is measuring the words.
               <li
                 key={line}
                 className="seed-line flex min-h-[17vh] items-center lg:min-h-[46vh]"
               >
-                <span className="display-sm block text-[clamp(1.6rem,5.2vw,3.2rem)] text-ink">
-                  {line}
+                <span className="seed-line-move">
+                  <span className="seed-line-text display-sm block text-[clamp(1.6rem,5.2vw,3.2rem)] text-ink">
+                    {line}
+                  </span>
                 </span>
               </li>
             ))}

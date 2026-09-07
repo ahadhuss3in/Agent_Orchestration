@@ -175,6 +175,65 @@ export const CHAT_MOCK: { from: "operator" | "agent"; text: string }[] = [
   },
 ];
 
+/**
+ * The FAQ near the foot of the page.
+ *
+ * Every answer is written against what this page and this project actually
+ * are. Nothing here promises a feature that does not exist: the page is a
+ * presentation artifact, so the honest answer to half of these is "not on this
+ * page", and that is what they say.
+ *
+ * `jump` is the point of the section. Each answer ends at a place on this page
+ * that shows the thing it just described, which turns the list into a short
+ * guided tour instead of a wall of text.
+ */
+export const FAQS: {
+  q: string;
+  a: string;
+  jump: { href: string; label: string };
+}[] = [
+  {
+    q: "If I typed a seed into this page, would it actually run?",
+    a: "No. This page is a presentation of the engine, not a deployment of it. There is no input bound to a backend anywhere on it, and the seed shown in the Seed section is a fixed example rather than a field. Everything you scroll past is an illustration of a pipeline that runs elsewhere.",
+    jump: { href: "#seed", label: "See the seed step" },
+  },
+  {
+    q: "What happens to entities I don't promote into agents?",
+    a: "Nothing is thrown away. Extraction writes every person, organization and location it found into Neo4j whether or not you promote it. An un-promoted entity stays a node with all its relationships intact — still queryable, still available to whatever an agent retrieves — it just never speaks. Promotion decides who acts, not who exists.",
+    jump: { href: "#agents", label: "Jump to Agents" },
+  },
+  {
+    q: "Can I seed a real event, or only invented ones?",
+    a: "Either. The distinction only changes step two. A seed described as real triggers a live web context fetch before extraction, so the graph is built against what is actually known about it. A fictional seed skips that fetch entirely and the engine reads nothing but the sentence you wrote.",
+    jump: { href: "#seed", label: "See the seed step" },
+  },
+  {
+    q: "How does a long run avoid blowing up the context window?",
+    a: "A rolling summary. Everything older than the current window is compressed into a single carried-forward brief, so an agent entering round forty is handed roughly the same amount of context as one entering round four. The window is bounded by design rather than by hoping runs stay short.",
+    jump: { href: "#simulation", label: "Jump to Simulation" },
+  },
+  {
+    q: "What happens once a simulation ends?",
+    a: "The run stops and the transcript stays. Every agent keeps its persona, its private memory of what it said, and whatever it retrieved during the rounds. From there you can open a direct conversation with any one of them about a decision it actually made.",
+    jump: { href: "#chat", label: "Jump to Chat" },
+  },
+  {
+    q: "Is the chat panel further up this page a working chat?",
+    a: "No, and it is labelled as a mock-up in place for exactly that reason. The composer under it is deliberately a plain element rather than a real text input, because a focusable field with nothing behind it would imply a request that is never sent.",
+    jump: { href: "#chat", label: "Jump to Chat" },
+  },
+  {
+    q: "Does re-running the same seed duplicate the graph?",
+    a: "No. The Neo4j write is idempotent: re-running a seed updates the nodes and relationships already there rather than stacking a second copy of each beside the first. Extraction can be re-run against a seed as many times as you like without the graph drifting.",
+    jump: { href: "#graph", label: "Jump to the Graph" },
+  },
+  {
+    q: "Why is promotion a manual gate instead of an automatic one?",
+    a: "Because it is the step that decides which entities get to act, and a model picking that on its own would quietly set the shape of everything downstream. It is one of the seven pipeline steps and the only one the engine will not walk through by itself.",
+    jump: { href: "#recap", label: "Read the pipeline" },
+  },
+];
+
 export const GRAPH_NODES = [
   { id: "n1", label: "PERSON", x: 118, y: 92 },
   { id: "n2", label: "ORG", x: 470, y: 78 },

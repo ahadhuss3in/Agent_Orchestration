@@ -115,10 +115,11 @@ export function RecapSection() {
                 style={{ "--ga": a, "--gb": b } as React.CSSProperties}
               >
                 <div className="flex items-baseline gap-3">
-                  {/* The numeral is real text at 6.7:1 rather than small type
-                      dropped onto a saturated fill — none of the vivid
-                      gradient stops clear 4.5:1 on white, so nothing small
-                      ever sits on top of one. */}
+                  {/* The numeral is real text at 7.3:1 on the panel rather
+                      than small type dropped onto a saturated fill. The rule
+                      survives the retheme: two of the Spectrum stops still
+                      fall under 4.5:1 on black, so nothing small ever sits on
+                      top of one. */}
                   <span
                     className="recap-num font-mono text-[15px] font-medium tabular-nums text-ink-dim"
                     aria-hidden="true"

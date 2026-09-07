@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import { gsap, SplitText, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
-import { InlineFigure } from "./WireframeFigures";
 import { Orb } from "./Orb";
 
 const CHIPS = [
@@ -12,21 +12,29 @@ const CHIPS = [
 ];
 
 /**
- * Client feedback #1: the v1 boot terminal was a small corner overlay. This
- * is the full-viewport version.
+ * The load-in, v3.
  *
- * Beat by beat:
- *   1. "PAN" / "THEON" fill the screen at 16vw, characters rising in.
- *   2. The Orchestrator (left) and the Wildcard (right) climb in from below
- *      the fold, drawing themselves with a stroke-dashoffset sweep so the
- *      line art looks hand-drawn rather than faded on.
- *   3. As each figure's bounding box arrives, it physically shoves its half
- *      of the wordmark out of the way — the halves tween outward on x with a
- *      rotation kick, timed to the figures' arrival, so it reads as
- *      displacement and not a crossfade.
- *   4. The whole overlay condenses: the giant halves scale and translate down
- *      into the measured position of the real <h1>, fading as they go, while
- *      the real hero fades up underneath. See the note on Flip below.
+ * WHAT WENT: the two wireframe figures that used to climb up from below the
+ * fold and shove the halves of the wordmark apart. No `Figure` /
+ * `InlineFigure` is used in the intro any more, and neither is the shove
+ * timing that was pinned to their arrival.
+ *
+ * WHAT REPLACED IT — a black stage with the classical engraving on it:
+ *   1. The plate (a white line-engraving on transparent, hence the hard black
+ *      ground: on a white page it renders as nothing at all) fades up
+ *      centred, `object-fit: contain` so the bust is never deformed.
+ *   2. A Ken-Burns drift runs the whole time the intro is up — a separate
+ *      infinite yoyo tween, not a beat in the timeline, so it never finishes
+ *      and never resets. 1.0 -> 1.08 with a small pan.
+ *   3. "PAN" / "THEON" rise in over it in plain white under
+ *      `mix-blend-mode: difference`. Where a glyph crosses a line of the
+ *      engraving the two invert against each other; where it crosses black it
+ *      stays white. Then the halves drift a few vw apart and back, which
+ *      slides the type across the linework so the inversion visibly moves —
+ *      that motion is the point, a static overlap would read as a flat text
+ *      layer on a photo.
+ *   4. The condense into the real <h1> is unchanged from v2, and so is the
+ *      skip button.
  *
  * Entirely absent under prefers-reduced-motion (the overlay is
  * `display: none` in CSS, and no timeline is built), and skippable at any
@@ -64,9 +72,7 @@ export function Hero() {
         const halves = Array.from(
           scope.querySelectorAll<HTMLElement>(".intro-half"),
         );
-        const figures = Array.from(
-          scope.querySelectorAll<HTMLElement>(".intro-figure"),
-        );
+        const bust = scope.querySelector<HTMLElement>(".intro-bust");
         const skip = scope.querySelector<HTMLButtonElement>(".intro-skip");
         const fades = Array.from(
           scope.querySelectorAll<HTMLElement>(".hero-fade"),
@@ -80,22 +86,10 @@ export function Hero() {
           mask: "lines",
           linesClass: "split-line",
         });
-        // NOTE: the giant halves are deliberately NOT split.
-        // `background-clip: text` paints the gradient through the element's
-        // own text; once SplitText lifts the glyphs into child <div>s there
-        // is no text left on the gradient element to clip against, and the
-        // wordmark rendered as an orange slab with knocked-out letters (or,
-        // at the start of the tween, as nothing at all). Each half animates
-        // as one intact block instead, which is also what the beat needs —
-        // a half of the word being shoved bodily aside, not eight letters
-        // drifting independently.
-
-        const strokes = figures.flatMap((f) =>
-          Array.from(f.querySelectorAll<SVGElement>(".wf-stroke")),
-        );
-        const joints = figures.flatMap((f) =>
-          Array.from(f.querySelectorAll<SVGElement>(".wf-joint")),
-        );
+        // NOTE: the giant halves are deliberately NOT split. Two intact
+        // blocks is what the beat needs — halves of one word sliding across
+        // the plate, not sixteen letters drifting independently, which would
+        // scramble the blend into visual noise.
 
         gsap.set(block, { opacity: 1 });
         gsap.set(heroSplit.chars, { yPercent: 120, opacity: 0 });
@@ -108,10 +102,25 @@ export function Hero() {
           scale: 1.14,
           transformOrigin: "50% 50%",
         });
-        gsap.set(figures, { yPercent: 118, opacity: 1 });
-        gsap.set(strokes, { strokeDashoffset: 1 });
-        gsap.set(joints, { opacity: 0, scale: 0 , transformOrigin: "50% 50%" });
+        if (bust) gsap.set(bust, { opacity: 0, scale: 1, xPercent: 0, yPercent: 0 });
         if (skip) gsap.set(skip, { opacity: 0 });
+
+        // The Ken-Burns drift. Deliberately its OWN infinite yoyo tween
+        // rather than a step in the timeline below: the brief asks for a
+        // continuous living backdrop, and anything sequenced into `tl` would
+        // play once and stop while the intro was still on screen.
+        const ken = bust
+          ? gsap.to(bust, {
+              scale: 1.08,
+              xPercent: 1.8,
+              yPercent: -2.2,
+              duration: 17,
+              ease: "sine.inOut",
+              yoyo: true,
+              repeat: -1,
+              transformOrigin: "50% 45%",
+            })
+          : null;
 
         // Hold the page still while the overlay owns the viewport.
         const html = document.documentElement;
@@ -124,6 +133,7 @@ export function Hero() {
         const finish = () => {
           unlock?.();
           unlock = null;
+          ken?.kill();
           overlay.style.display = "none";
           html.classList.remove("js-motion");
           ScrollTrigger.refresh();
@@ -134,67 +144,51 @@ export function Hero() {
           onComplete: finish,
         });
 
-        // --- 1. giant wordmark ------------------------------------------
-        tl.to(halves, {
-          yPercent: 0,
-          opacity: 1,
-          scale: 1,
-          duration: 1,
-          ease: "expo.out",
-          stagger: 0.12,
-        });
-        if (skip) tl.to(skip, { opacity: 1, duration: 0.4 }, 0.6);
+        // --- 1. the plate arrives ---------------------------------------
+        if (bust) tl.to(bust, { opacity: 1, duration: 1.1, ease: "power2.out" }, 0);
 
-        // --- 2. figures climb in, drawing themselves --------------------
-        tl.addLabel("climb", "+=0.45");
+        // --- 2. giant wordmark ------------------------------------------
         tl.to(
-          figures,
-          { yPercent: 0, duration: 1.3, ease: "power3.out", stagger: 0.16 },
-          "climb",
-        )
-          .to(
-            strokes,
-            {
-              strokeDashoffset: 0,
-              duration: 0.95,
-              ease: "power2.inOut",
-              stagger: { each: 0.028, from: "start" },
-            },
-            "<",
-          )
-          .to(
-            joints,
-            { opacity: 1, scale: 1, duration: 0.3, stagger: 0.02, ease: "back.out(3)" },
-            "<0.55",
-          );
+          halves,
+          {
+            yPercent: 0,
+            opacity: 1,
+            scale: 1,
+            duration: 1,
+            ease: "expo.out",
+            stagger: 0.12,
+          },
+          0.25,
+        );
+        if (skip) tl.to(skip, { opacity: 1, duration: 0.4 }, 0.8);
 
-        // --- 3. the arrival shoves the wordmark aside -------------------
-        // Placed against the climb tween's own start rather than at the end
-        // of the timeline: at "<0.62" the figures are about two thirds of the
-        // way up, which is the frame their bounding boxes first overlap the
-        // wordmark. Displacing on impact rather than after they land is what
-        // makes it read as a shove instead of a transition.
+        // --- 3. the type slides through the engraving -------------------
+        // The halves ease apart and settle back. Under `difference` this
+        // walks the inversion boundary across the bust's linework, which is
+        // what sells the type as passing through the plate rather than
+        // sitting on top of it. Small amplitude on purpose: past about 5vw
+        // the two halves stop reading as one word.
+        tl.addLabel("through", "+=0.25");
         tl.to(
           halves[0],
-          {
-            x: "-42vw",
-            yPercent: 6,
-            rotation: -12,
-            duration: 0.8,
-            ease: "power4.out",
-          },
-          "climb+=0.62",
-        ).to(
-          halves[1],
-          {
-            x: "42vw",
-            yPercent: -6,
-            rotation: 12,
-            duration: 0.8,
-            ease: "power4.out",
-          },
-          "climb+=0.74",
-        );
+          { x: "-3.4vw", duration: 1.5, ease: "sine.inOut" },
+          "through",
+        )
+          .to(
+            halves[1],
+            { x: "3.4vw", duration: 1.5, ease: "sine.inOut" },
+            "through",
+          )
+          .to(
+            halves[0],
+            { x: "-0.6vw", duration: 1.1, ease: "sine.inOut" },
+            "through+=1.5",
+          )
+          .to(
+            halves[1],
+            { x: "0.6vw", duration: 1.1, ease: "sine.inOut" },
+            "through+=1.5",
+          );
 
         // --- 4. condense into the real hero -----------------------------
         // NOTE ON FLIP: GSAP's Flip plugin is genuinely available in this
@@ -224,11 +218,6 @@ export function Hero() {
           },
           "+=0.12",
         )
-          .to(
-            figures,
-            { yPercent: 60, opacity: 0, duration: 0.7, ease: "power2.in" },
-            "<",
-          )
           .to(overlay, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "<0.3")
           .to(
             heroSplit.chars,
@@ -300,7 +289,23 @@ export function Hero() {
       {/* Motion-only: hidden by default in CSS, revealed by the `js-motion`
           class the layout's inline script sets, and `display:none` outright
           under prefers-reduced-motion. */}
-      <div className="intro-overlay fixed inset-0 z-50 overflow-hidden bg-paper">
+      <div className="intro-overlay intro-stage fixed inset-0 z-50 overflow-hidden">
+        {/* The engraving. Decorative: the wordmark on top of it and the real
+            <h1> underneath carry everything this screen actually says. */}
+        <div
+          aria-hidden="true"
+          className="intro-bust pointer-events-none absolute inset-0"
+        >
+          <Image
+            src="/img/intro-bust.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-contain object-center"
+          />
+        </div>
+
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
@@ -309,32 +314,18 @@ export function Hero() {
               430px wide in Orbitron, which runs off both edges of a 375px
               screen. Two lines at 18vw fills the viewport just as hard
               without clipping the P and the N. */}
-          <p className="display flex select-none flex-col items-center whitespace-nowrap text-[18vw] leading-[0.92] tracking-tight sm:flex-row sm:text-[15vw] sm:leading-none">
-            <span className="intro-half grad-text inline-block">PAN</span>
-            <span className="intro-half grad-text inline-block">THEON</span>
+          <p className="intro-word display flex select-none flex-col items-center whitespace-nowrap text-[18vw] leading-[0.92] tracking-tight sm:flex-row sm:text-[15vw] sm:leading-none">
+            <span className="intro-half inline-block">PAN</span>
+            <span className="intro-half inline-block">THEON</span>
           </p>
         </div>
 
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-center gap-[34vw] sm:gap-[26vw]"
-        >
-          {/* Aurum on the Zeus figure: the mythic thread stays gold. The
-              deepened bronze rather than raw #f2b705, because pale gold line
-              art on a white ground is effectively invisible. */}
-          <InlineFigure
-            id="orchestrator"
-            className="intro-figure h-[42vh] w-auto text-[color:var(--ink-aurum)] sm:h-[62vh]"
-          />
-          <InlineFigure
-            id="wildcard"
-            className="intro-figure h-[36vh] w-auto text-ink sm:h-[52vh]"
-          />
-        </div>
-
+        {/* Outside the blended layer on purpose — a control that inverted
+            against the artwork underneath it would be unreadable at exactly
+            the moment someone reached for it. */}
         <button
           type="button"
-          className="intro-skip absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-sm border border-[color:var(--line-strong)] bg-paper px-4 py-2 font-mono text-[11px] tracking-[0.16em] text-ink uppercase"
+          className="intro-skip absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-sm border border-[color:var(--line-strong)] bg-[#08080a] px-4 py-2 font-mono text-[11px] tracking-[0.16em] text-ink uppercase"
           aria-label="Skip the intro animation"
         >
           Skip intro

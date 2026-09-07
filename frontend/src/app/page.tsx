@@ -7,6 +7,7 @@ import { AgentsSection } from "@/components/AgentsSection";
 import { SimulationSection } from "@/components/SimulationSection";
 import { ChatSection } from "@/components/ChatSection";
 import { RecapSection } from "@/components/RecapSection";
+import { FaqSection } from "@/components/FaqSection";
 import { CtaFooter } from "@/components/CtaFooter";
 
 /**
@@ -35,6 +36,12 @@ export default function Page() {
         <SimulationSection />
         <ChatSection />
         <RecapSection />
+        {/* Between the recap and the closing CTA on purpose: by here the
+            reader has seen the whole pipeline, and every answer's jump chip
+            sends them back into whichever part of it they want a second look
+            at. It is not one of the six pipeline stages, so it is not in the
+            HUD rail. */}
+        <FaqSection />
         <CtaFooter />
       </main>
     </>

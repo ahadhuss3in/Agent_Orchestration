@@ -9,17 +9,19 @@ import { SIM_LINES } from "@/lib/content";
 import { Figure } from "./WireframeFigures";
 
 /**
- * Cool turns take the Signal blue, warm turns the Pulse green — both read on
- * white and neither is anywhere near the banned violet band.
+ * Cool turns take the Signal blue, warm turns the Pulse green. Both are the
+ * lightened-for-black ink variants (10.5:1 and 11.0:1 on the page, 9.7:1 and
+ * 10.2:1 on a panel), and neither is anywhere near the banned violet band.
  */
 const ACCENT = {
   cool: "var(--ink-signal)",
   warm: "var(--ink-pulse)",
 } as const;
 
+/** The same two hues as borders. Tracks --ink-signal / --ink-pulse. */
 const BORDER = {
-  cool: "rgba(14,109,158,0.5)",
-  warm: "rgba(5,107,74,0.5)",
+  cool: "rgba(94,201,232,0.5)",
+  warm: "rgba(52,216,164,0.5)",
 } as const;
 
 /**

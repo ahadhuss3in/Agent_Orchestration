@@ -128,7 +128,7 @@ export function ChatSection() {
                         "max-w-[85%] rounded-sm border bg-paper p-3.5",
                         m.from === "operator"
                           ? "border-line"
-                          : "border-[color:rgba(26,82,214,0.35)]",
+                          : "border-[color:rgba(143,178,255,0.4)]",
                       ].join(" ")}
                     >
                       <span

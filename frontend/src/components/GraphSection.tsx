@@ -1,5 +1,6 @@
 import { GRAPH_NODES, GRAPH_EDGES } from "@/lib/content";
 import { Orb } from "./Orb";
+import { GraphNodeTypes } from "./GraphNodeTypes";
 
 /** Centre of the constellation, in the overlay SVG's coordinate space. */
 const CX = 300;
@@ -79,16 +80,21 @@ export function GraphSection() {
           </div>
         </div>
 
-        {/* Decorative: every entity type and the idea of edges is already
-            stated in the copy and the legend below. */}
-        <div
-          className="graph-visual relative mx-auto mt-14 aspect-[600/420] w-full max-w-[760px] lg:mt-20"
-          aria-hidden="true"
-        >
+        {/* The drawing itself is decorative — every entity type and the idea
+            of edges is already stated in the copy and the legend below — so
+            the <svg> and the orb inside carry `aria-hidden` individually. The
+            wrapper does not, because `GraphNodeTypes` puts real focusable
+            buttons in here and an `aria-hidden` ancestor would make them
+            unreachable to assistive tech while leaving them in the tab order,
+            which is worse than either. */}
+        <div className="graph-visual relative mx-auto mt-14 aspect-[600/420] w-full max-w-[760px] lg:mt-20">
           {/* The seed, arriving. Starts invisible on wide viewports: the
               journey controller crossfades it in at the exact screen position
               the traveling flyer reaches. */}
-          <div className="graph-center-orb absolute left-1/2 top-1/2 w-[24%] -translate-x-1/2 -translate-y-1/2">
+          <div
+            aria-hidden="true"
+            className="graph-center-orb absolute left-1/2 top-1/2 w-[24%] -translate-x-1/2 -translate-y-1/2"
+          >
             <Orb uid="graph" className="h-auto w-full" />
           </div>
 
@@ -153,6 +159,10 @@ export function GraphSection() {
               })}
             </g>
           </svg>
+
+          {/* Sits on top of the drawing: hover / focus / tap a node to see
+              what kind of entity it is. */}
+          <GraphNodeTypes />
         </div>
 
         <ul className="reveal-target mt-10 flex flex-wrap justify-center gap-x-6 gap-y-3">

@@ -2,65 +2,84 @@
 
 /* ============================================================
    PANTHEON — design tokens
-   Light only. No dark mode. (v2: the whole dark palette from v1
-   is gone, including every violet/purple token.)
+   v3: BLACK BASE. Black surfaces, white primary text, the v2
+   accent family layered on top as glows / borders / highlights.
+   No violet/purple anywhere, same as v2. Still a single theme —
+   there is no light mode to fall back to.
 
-   CONTRAST AUDIT — recomputed from scratch for the light surfaces
-   (WCAG 2.1 relative luminance, not eyeballed):
+   CONTRAST AUDIT — recomputed from scratch for the BLACK surfaces
+   (WCAG 2.1 relative luminance; nothing here is an inversion of
+   the v2 numbers, every ratio below was recalculated):
 
-     --paper        #ffffff  L = 1.00000
-     --paper-raised #f5f5f7  L = 0.91434
-     --ink          #0b0b10  L = 0.00348
-     --ink-dim      #5b5b68  L = 0.10705
+     --paper        #08080a  L = 0.00247
+     --paper-raised #131317  L = 0.00666
+     --ink          #f4f4f6  L = 0.90588
+     --ink-dim      #a2a2ae  L = 0.36581
 
-     --ink     on --paper        = 19.6 : 1
-     --ink     on --paper-raised = 18.0 : 1
-     --ink-dim on --paper        =  6.7 : 1
-     --ink-dim on --paper-raised =  6.1 : 1
+     --ink     on --paper        = 18.22 : 1
+     --ink     on --paper-raised = 16.87 : 1
+     --ink-dim on --paper        =  7.92 : 1
+     --ink-dim on --paper-raised =  7.34 : 1
 
-   So the briefed --ink-dim ships unmodified; it clears 4.5:1 on
-   both surfaces with room to spare.
+   The two surfaces are only 1.08:1 apart, which is deliberate:
+   a raised panel on black is separated by its 1px border and its
+   glow, not by a big luminance step, and a bigger step would start
+   to grey the page out. Nothing relies on the surface difference
+   alone to convey meaning.
 
-   THE VIVID GRADIENT PAIRS ARE NOT TEXT COLOURS. Measured against
-   --paper they land at:
-     #ff6a3d 2.85   #e6265a 4.37
-     #00c2d1 2.18   #2f6bff 4.50
-     #f2b705 1.83   #ff8a3d 2.36
-     #00c27a 2.33   #00e2b8 1.62
-     #38bdf8 2.16
-   Most fail even the 3:1 large-text floor, so they are used ONLY
-   for strokes, fills, rules, glows and decorative SVG. Section
-   headlines stay --ink and take their identity from a gradient
-   rule + gradient underline instead of gradient text. The single
-   exception is the intro wordmark, which is aria-hidden decoration
-   duplicated by the real <h1> underneath it.
+   THE VIVID GRADIENT PAIRS STILL ARE NOT GENERAL TEXT COLOURS,
+   but the reasoning has flipped: on black they are bright rather
+   than pale. Measured against --paper #08080a:
+     #ff6a3d 7.03   #e6265a 4.56
+     #00c2d1 9.18   #2f6bff 4.45
+     #f2b705 11.01  #ff8a3d 8.53
+     #00c27a 8.57   #00e2b8 11.98
+     #38bdf8 9.34
+   Two of them (#e6265a at 4.56, #2f6bff at 4.45) sit right on or
+   just under the 4.5 line, and both drop further on --paper-raised
+   (4.23 / 4.12). So the rule is unchanged in effect: the raw
+   gradient stops stay strokes, fills, rules, glows and decorative
+   SVG, and small accent text uses the dedicated ink variants below.
 
-   For small accent text inside a section (hud labels, persona
-   roles) each gradient gets a deepened "ink" variant, all of which
-   were computed to clear 4.5:1 on BOTH light surfaces:
-     --ink-ignis  #c2320f  5.6 / 5.1
-     --ink-signal #0e6d9e  5.6 / 5.2
-     --ink-aurum  #8a5a00  5.6 / 5.2
-     --ink-pulse  #056b4a  6.5 / 6.0
-     --ink-wire   #1a52d6  6.5 / 6.0
+   The accent ink variants are LIGHTENED for black (the v2 deepened
+   variants — #c2320f and friends — measure 3.6:1 or worse here and
+   were all replaced). Recomputed on both black surfaces:
+     --ink-ignis  #ff8a66  8.65 / 8.01
+     --ink-signal #5ec9e8 10.48 / 9.70
+     --ink-aurum  #f2b705 11.01 / 10.19
+     --ink-pulse  #34d8a4 10.96 / 10.15
+     --ink-wire   #8fb2ff  9.51 / 8.81
+
+   BUTTON FILLS have two constraints on black, not one: the label
+   must clear 4.5:1 against the fill AND the fill must clear 3:1
+   against the page so the control has a visible boundary. The v2
+   primary gradient failed the second test on its dark end
+   (#b3123f is 2.93:1 on #08080a), so that stop moved to #cc1a47:
+     #c2320f  white label 5.09  fill vs page 3.58
+     #cc1a47  white label 5.02  fill vs page 3.63
+   --line-strong likewise had to come up: at 0.22 alpha it composites
+   to ~#2a2a2b (2.26:1 on the page), under the 3:1 a button border
+   needs, so it is 0.38 alpha now (~#626266, 3.1:1).
 
    Hue check against the "no violet/purple, roughly 260-300deg"
-   rule — every colour introduced here:
-     #ff6a3d 16   #e6265a 344  #c2320f 12
-     #00c2d1 187  #2f6bff 223  #0e6d9e 200
-     #f2b705 45   #ff8a3d 24   #8a5a00 39
-     #00c27a 158  #00e2b8 168  #056b4a 154
-     #38bdf8 198  #1a52d6 222  #b3123f 343
+   rule — every colour in this file:
+     #ff6a3d 14   #e6265a 344  #ff8a66 14
+     #00c2d1 184  #2f6bff 223  #5ec9e8 193
+     #f2b705 45   #ff8a3d 24   #34d8a4 161
+     #00c27a 158  #00e2b8 169  #8fb2ff 221
+     #38bdf8 198  #c2320f 12   #cc1a47 345
    Nothing lands in 260-300.
    ============================================================ */
 
 :root {
-  --paper: #ffffff;
-  --paper-raised: #f5f5f7;
-  --ink: #0b0b10;
-  --ink-dim: #5b5b68;
-  --line: rgba(11, 11, 16, 0.12);
-  --line-strong: rgba(11, 11, 16, 0.22);
+  --paper: #08080a;
+  --paper-raised: #131317;
+  --ink: #f4f4f6;
+  --ink-dim: #a2a2ae;
+  /* Decorative hairlines. */
+  --line: rgba(244, 244, 246, 0.16);
+  /* Interactive-component boundaries. Measured, see the audit above. */
+  --line-strong: rgba(244, 244, 246, 0.38);
 
   /* --- per-section two-stop gradients --- */
   --grad-seed-a: #ff6a3d;
@@ -75,12 +94,12 @@
   --grad-chat-b: #38bdf8;
   --grad-recap: linear-gradient(90deg, #ff6a3d, #f2b705, #00c27a, #2f6bff);
 
-  /* Text-safe deepened variants. See audit above. */
-  --ink-ignis: #c2320f;
-  --ink-signal: #0e6d9e;
-  --ink-aurum: #8a5a00;
-  --ink-pulse: #056b4a;
-  --ink-wire: #1a52d6;
+  /* Text-safe variants, LIGHTENED for the black surfaces. See audit. */
+  --ink-ignis: #ff8a66;
+  --ink-signal: #5ec9e8;
+  --ink-aurum: #f2b705;
+  --ink-pulse: #34d8a4;
+  --ink-wire: #8fb2ff;
 
   /* Section-local identity. Overridden by the .sec-* classes below so
      every shared component (rules, brackets, panels, glows) picks up
@@ -143,7 +162,7 @@
 html {
   scroll-behavior: smooth;
   background: var(--paper);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
@@ -244,13 +263,17 @@ section[id] {
   padding-bottom: 0.06em;
 }
 
-/* Decorative only — used for the giant intro wordmark, which is
-   aria-hidden and duplicated by the real <h1>.
+/* Decorative only.
 
    NOTE: `background-clip: text` paints through the element's OWN text, so
    anything wearing this class must keep its text intact. Running SplitText
    over one of these renders it as a solid slab with the letters knocked out.
-   The intro halves animate as whole blocks for exactly this reason. */
+
+   v3 note: the giant intro wordmark no longer uses this. It is plain white
+   under `mix-blend-mode: difference` so it inverts against the engraving
+   behind it, and a gradient fill would have muddied that inversion into
+   arbitrary complementary colours. The class stays for any future gradient
+   display type. */
 .grad-text {
   background-image: linear-gradient(100deg, var(--ga), var(--gb));
   -webkit-background-clip: text;
@@ -258,24 +281,13 @@ section[id] {
   color: transparent;
 }
 
-/* The wordmark is two elements so each half can be shoved independently, but
-   it has to read as one word: each half carries a double-width gradient
-   anchored to its own side, so the sweep runs continuously across the seam
-   instead of restarting at the "T". */
-.intro-half {
-  background-size: 200% 100%;
-}
-.intro-half:first-child {
-  background-position: 0% 0;
-}
-.intro-half:last-child {
-  background-position: 100% 0;
-}
-
 /* ------------------------------------------------------------
-   Panels — on white, "glow" is a soft colour-tinted blur shadow at
-   low opacity, never a neon text-shadow. Ported straight from the
-   dark theme this would have looked broken.
+   Panels — on black a glow is a real glow. In v2 (white page) a
+   colour-tinted blur read as a rendering fault and had to be kept
+   almost invisible; here the same shadow is what separates a raised
+   panel from the page, since the two surfaces are only 1.08:1 apart.
+   Still disciplined: a soft tinted lift plus a hairline inner
+   highlight, not a neon halo.
    ------------------------------------------------------------ */
 
 .panel {
@@ -287,9 +299,9 @@ section[id] {
 
 .panel-glow {
   box-shadow:
-    0 1px 2px rgba(11, 11, 16, 0.04),
-    0 18px 44px -30px color-mix(in srgb, var(--ga) 70%, transparent),
-    0 6px 18px -14px color-mix(in srgb, var(--gb) 45%, transparent);
+    inset 0 1px 0 rgba(244, 244, 246, 0.05),
+    0 20px 50px -32px color-mix(in srgb, var(--ga) 85%, transparent),
+    0 8px 24px -16px color-mix(in srgb, var(--gb) 55%, transparent);
 }
 
 /* A 2px gradient hairline along the top edge of a card. */
@@ -347,27 +359,31 @@ section[id] {
     transform 0.2s ease;
 }
 
-/* White on #c2320f = 5.6:1, white on #b3123f = 6.8:1. Both clear 4.5:1
-   across the whole sweep, which the briefed #ff6a3d (2.9:1) would not. */
+/* Two constraints on black, both measured (see the audit at the top):
+   white label vs fill >= 4.5, and fill vs page >= 3.0 so the control has a
+   visible edge. #c2320f -> 5.09 / 3.58, #cc1a47 -> 5.02 / 3.63. The v2 dark
+   stop #b3123f only managed 2.93 against the page and was replaced. The raw
+   briefed #ff6a3d is bright enough against the page but only carries a
+   2.59:1 white label, so it stays out of the fill and appears as the glow. */
 .btn-primary {
   color: #ffffff;
-  background: linear-gradient(110deg, #c2320f, #b3123f);
+  background: linear-gradient(110deg, #c2320f, #cc1a47);
   border-color: transparent;
-  box-shadow: 0 16px 34px -22px rgba(194, 50, 15, 0.85);
+  box-shadow: 0 18px 40px -22px rgba(255, 106, 61, 0.65);
 }
 .btn-primary:hover {
-  background: linear-gradient(110deg, #a92a0a, #9c0f36);
-  box-shadow: 0 18px 38px -18px rgba(194, 50, 15, 0.9);
+  background: linear-gradient(110deg, #d6390f, #e01f4f);
+  box-shadow: 0 20px 46px -18px rgba(255, 106, 61, 0.8);
 }
 
 .btn-ghost {
   color: var(--ink);
-  background: var(--paper);
+  background: transparent;
   border-color: var(--line-strong);
 }
 .btn-ghost:hover {
   border-color: var(--ink);
-  box-shadow: 0 12px 30px -24px rgba(11, 11, 16, 0.6);
+  background: rgba(244, 244, 246, 0.06);
 }
 
 /* ------------------------------------------------------------
@@ -416,8 +432,8 @@ section[id] {
 
 .grid-field {
   background-image:
-    linear-gradient(to right, rgba(11, 11, 16, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(11, 11, 16, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(244, 244, 246, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 244, 246, 0.055) 1px, transparent 1px);
   background-size: 72px 72px;
   -webkit-mask-image: radial-gradient(
     ellipse 90% 70% at 60% 35%,
@@ -431,13 +447,20 @@ section[id] {
   );
 }
 
-/* Soft section wash: the gradient at very low opacity behind the content,
-   so each section reads as its own colour without tinting any text. */
+/* Soft section wash: the gradient at low opacity behind the content, so each
+   section reads as its own colour without tinting any text.
+
+   v3: 0.075 was tuned for a white page, where the wash darkened the ground.
+   On black it lightens it, so the number was re-derived from the worst case
+   rather than nudged: at 0.16 the hottest stop (#ff6a3d) composites over
+   #08080a to about rgb(48,25,17), L = 0.009, which still leaves --ink-dim at
+   7.0:1 and --ink at 16.3:1. Anything much past 0.2 starts eating into the
+   4.5:1 floor for the dim body copy. */
 .sec-wash {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.075;
+  opacity: 0.16;
   background: radial-gradient(
     ellipse 70% 55% at var(--wash-x, 78%) var(--wash-y, 26%),
     var(--ga) 0%,
@@ -512,6 +535,229 @@ html.js-motion .hero-block {
   opacity: 0;
 }
 
+/* ------------------------------------------------------------
+   The load-in, v3.
+
+   The wireframe-figures-shove choreography is gone. What is left is a
+   pure black stage, the engraving centred on it, and the wordmark cutting
+   through the linework by blend mode.
+   ------------------------------------------------------------ */
+
+/* Hard #000, not --paper: the engraving is a white line drawing on a
+   transparent ground and the intro is the one place on the page that wants
+   the absolute floor behind it. */
+.intro-stage {
+  background: #000000;
+}
+
+/* `contain`, never `cover`. The plate is 1024x1152 and stretching it would
+   deform the linework; letterboxing it into black costs nothing because the
+   stage is already black. `will-change` is here rather than on the <img>
+   because the Ken-Burns tween drives this wrapper. */
+.intro-bust {
+  will-change: transform;
+}
+
+/* THE EFFECT.
+
+   `difference` over `exclusion`: exclusion pulls white-on-white toward a mid
+   grey, which reads as the type simply dimming. difference sends it to a hard
+   black, so every glyph edge that crosses a line of the engraving flips
+   outright — the type genuinely passes through the plate instead of sitting
+   on it. Against the black ground the same white stays white, so the wordmark
+   is at full strength everywhere it is not overlapping. */
+.intro-word {
+  color: #ffffff;
+  mix-blend-mode: difference;
+}
+
+/* ------------------------------------------------------------
+   The seed swallow.
+
+   Nothing is declared here: the whole mechanic is a per-frame transform
+   written by the journey controller. These two classes exist so the
+   controller has a node to write to that is NOT the node the reveal
+   animations own, and so the reduced-motion block below can flatten them.
+   `.seed-line`, `.seed-heading-wrap` and `.seed-card-wrap` are the
+   measurement anchors and must never be transformed — measuring an element
+   you are also moving feeds its own displacement back into the distance
+   calculation.
+   ------------------------------------------------------------ */
+
+.seed-line-move,
+.seed-card-move {
+  display: block;
+  /* Full width of the anchor so the two boxes share a centre point. If the
+     moved box were narrower than the box being measured, the element would
+     be flung at a point beside the sigil rather than into it. */
+  width: 100%;
+  will-change: transform;
+}
+
+/* ------------------------------------------------------------
+   Graph entity-type popups
+   ------------------------------------------------------------ */
+
+.gnode-hot {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.gnode-hot:hover::after,
+.gnode-hot:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+}
+
+/* Anchored above the node and centred on it. The anchor owns the
+   positioning so GSAP can own scale/opacity/y on the panel inside it
+   without the two fighting over one transform. */
+.gnode-pop-anchor {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-bottom: 8px;
+  pointer-events: none;
+}
+
+.gnode-pop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  background: var(--paper-raised);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.9);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  /* Hidden by default so nothing flashes before the controller takes over.
+     GSAP owns transform and opacity from mount onward. */
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------
+   FAQ accordion
+   ------------------------------------------------------------ */
+
+.faq-item + .faq-item {
+  border-top: 1px solid var(--line);
+}
+
+.faq-trigger {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.15rem 0;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.faq-trigger:hover .faq-q {
+  color: var(--gink);
+}
+
+.faq-q {
+  transition: color 0.2s ease;
+}
+
+.faq-marker {
+  flex: none;
+  margin-top: 0.15rem;
+  color: var(--gink);
+}
+
+.faq-panel {
+  overflow: hidden;
+}
+
+/* The terminal-styled jump chip. --gink is measured >= 8:1 on both black
+   surfaces for every section, so this is legible as small text, unlike the
+   raw gradient stops. */
+.faq-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gink);
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.faq-jump:hover {
+  border-color: var(--gink);
+  background: rgba(244, 244, 246, 0.05);
+}
+
+/* ------------------------------------------------------------
+   Agents section background — the borrowed face.
+
+   SCRIM, MEASURED. Sampled in the browser, not guessed: the plate's
+   brightest channel is a full 255, so the scrim is sized against a pure white
+   source pixel and there is no brighter case for it to fail on.
+
+     image at 0.34 over #000            -> rgb(87,87,87)
+     + scrim at its LIGHTEST point 0.36 -> rgb(55,55,55), L = 0.0389
+     + scrim at its heaviest point 0.48 -> rgb(45,45,45), L = 0.0262
+
+   Against the lightest point, which is the number that has to hold:
+     --ink     #f4f4f6  ->  10.76 : 1
+     --ink-dim #a2a2ae  ->   4.68 : 1
+   Both clear 4.5:1 on the brightest pixel the image can produce, so every
+   foreground element in the section clears it everywhere else too. The first
+   pass at this used a 0.30 lightest stop, which measured 4.32:1 for --ink-dim
+   — close enough to look fine and not close enough to ship. The persona cards
+   sit on the opaque --paper-raised panel fill and are not relying on the
+   scrim at all.
+   ------------------------------------------------------------ */
+
+.agents-bg-img {
+  opacity: 0.34;
+  will-change: transform;
+}
+
+.agents-bg-scrim {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.48) 0%,
+    rgba(0, 0, 0, 0.36) 42%,
+    rgba(0, 0, 0, 0.46) 100%
+  );
+}
+
+/* Faint relationship web between the Orchestrator and the council, echoing
+   the Graph section's own edge treatment. Normalised with pathLength=1 the
+   same way `.edge-path` is, so one shared tween draws them all evenly. */
+.agents-edge {
+  stroke: var(--grad-agents-a);
+  stroke-opacity: 0.42;
+  stroke-width: 1.1;
+}
+
 /* The traveling seed is a desktop-motion-only device. It is created
    hidden and only revealed by the journey timeline. */
 .seed-flyer {
@@ -555,6 +801,10 @@ html.js-motion .hero-block {
   .reveal-target,
   .hero-block,
   .seed-line,
+  .seed-line-move,
+  .seed-line-text,
+  .seed-card-move,
+  .seed-heading,
   .persona-figure,
   .pw-fallback {
     opacity: 1 !important;
@@ -563,7 +813,14 @@ html.js-motion .hero-block {
     visibility: visible !important;
   }
 
-  .edge-path {
+  /* Backgrounds stay, their drift does not. */
+  .agents-bg-img,
+  .intro-bust {
+    transform: none !important;
+  }
+
+  .edge-path,
+  .agents-edge {
     stroke-dashoffset: 0 !important;
   }
 
