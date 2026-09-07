@@ -50,7 +50,7 @@ export function SeedSection() {
           {/* The width cap lives on the wrapper, not the <h2>, so the anchor
               box and the moved box are exactly the same rectangle and the
               measured centre is the heading's real centre. */}
-          <div className="seed-heading-wrap max-w-[17ch]">
+          <div className="seed-heading-wrap max-w-[26ch]">
             <h2
               id="seed-heading"
               className="seed-heading display-sm text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
