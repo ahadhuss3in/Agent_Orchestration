@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Orbitron, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const orbitron = Orbitron({
@@ -64,6 +65,7 @@ export default function RootLayout({
       <body>
         <script dangerouslySetInnerHTML={{ __html: MOTION_PROBE }} />
         {children}
+        <Analytics />
       </body>
     </html>
   );
