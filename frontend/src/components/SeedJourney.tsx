@@ -674,28 +674,39 @@ export function SeedJourney() {
         so the graph unstuck on the final frame and visibly slid up off the top
         of the screen, which is what the first pass actually did.
 
-        80vh -> 52vh, AND THE REASON IS MEASURED. Client: "if anyone scrolls
-        the graph just sticks in middle", and after a first cut at this, "the
-        graph is still stuck for few scrolls when scrolling down after it forms
-        the graph". At 80vh the graph was genuinely held, unchanging, for 746px
-        at 1440x900 — 0.83 of a viewport in which scrolling did nothing visible
-        — and then slid away over another full viewport at unchanged size,
-        which is the separate bug `GraphRelay` now fixes. Two problems, and
-        this spacer was half of the first one.
+        80vh -> 52vh -> 40vh, AND THE REASON IS MEASURED EACH TIME. Client, on
+        three successive builds: "if anyone scrolls the graph just sticks in
+        middle", then "the graph is still stuck for few scrolls when scrolling
+        down after it forms the graph", then "still gets stuck to the screen
+        when scrolling up and down".
 
-        52vh leaves 494px of hold at 1440x900, and only the first ~180px of
-        that is truly inert: `GraphRelay` opens the departure about two wheel
-        notches after the graph settles, so past that point every further
-        scroll visibly moves something. That is the number that matters — not
-        the spacer length but how long scrolling produces no change at all —
-        and it is down from 746px to under 180.
+        At 80vh the graph was held, unchanging, for 746px at 1440x900 — 0.83 of
+        a viewport in which scrolling did nothing visible — and then slid away
+        over another full viewport at unchanged size, which is the separate bug
+        `GraphRelay` fixes. At 52vh the hold was 494px with roughly the first
+        180 still inert.
+
+        THE NUMBER THAT MATTERS IS NOT THIS ONE. It is how long scrolling
+        produces no change at all, and that is set by where `GraphRelay` opens
+        the departure, not by the spacer. So both moved: the spacer to 40vh
+        (386px of hold at 1440x900) and the departure's opening to p = 0.045,
+        about 60px past the settle point. What is left is a stretch where every
+        scroll notch visibly shrinks the graph, bracketed by ~60px at the start
+        and ~100px at the end where it is already gone and the box is empty.
+
+        AND IT IS SYMMETRIC, which had not been checked before and is the half
+        of the complaint that was being missed. `depart` is a pure function of
+        scroll position, so scrolling back UP through this zone re-expands the
+        graph through the identical curve — the reverse pass is not a separate
+        code path that could have been left inert, it is the same one running
+        backwards.
 
         The floor is not arbitrary. The spacer has to stay longer than the
         distance between the journey's finish and the sticky release, or the
         graph unsticks before it has settled, which is the bug this element was
         originally added to fix; and it has to leave `GraphRelay` room to
         complete the recede before that release. At 1440x900 those put the
-        floor around 30vh, so 52vh keeps real margin at every viewport height.
+        floor around 30vh, so 40vh keeps margin at every viewport height.
 
         The other half of "sticks in middle" was that nothing ever SAID the
         pause was for something. That is fixed in `CubeStage` with a hint at
@@ -703,11 +714,11 @@ export function SeedJourney() {
 
         ZERO BELOW 1024, and that is not a detail. `CubeStage` does not mount
         at all under that width, so there is no sticky box needing runway and
-        nothing to dwell on — the spacer would be 52vh of empty black between
+        nothing to dwell on — the spacer would be 40vh of empty black between
         the graph legend and the Agents section, which is what the first pass
         shipped and which reads as a broken page on a phone.
       */}
-      <div aria-hidden="true" className="h-0 lg:h-[52vh]" />
+      <div aria-hidden="true" className="h-0 lg:h-[40vh]" />
     </div>
   );
 }

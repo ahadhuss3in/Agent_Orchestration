@@ -762,11 +762,14 @@ export function AgentsSection() {
               <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
                 {/* Aurum stays on the Orchestrator — the one figure that is
                     a system role rather than a choice, and the one thread on
-                    the page that has always been gold. */}
+                    the page that has always been gold. Sourced from
+                    `ARCHETYPE_TONE.orchestrator` rather than a second literal,
+                    so this and the crown-cube swatch below can never drift
+                    out of agreement with each other. */}
                 <div className="orchestrator-figure relative shrink-0">
                   <CubeFigure
                     id="orchestrator"
-                    tone="var(--ink-accent)"
+                    tone={ARCHETYPE_TONE.orchestrator}
                     className="h-[190px] w-auto sm:h-[210px]"
                     cubeClass="orch-stroke"
                     keyClass="orch-key"

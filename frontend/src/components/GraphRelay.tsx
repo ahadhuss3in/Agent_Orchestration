@@ -244,14 +244,42 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
             ? stageColumn.getBoundingClientRect().bottom
             : Infinity;
 
-          const srcX = g.left + g.width / 2;
-          const srcY = g.top + g.height / 2;
+          // WHERE THE SIGIL COMES OUT OF.
+          //
+          // On the WebGL branch this is the point the 3D graph is ANCHORED to
+          // while it recedes (`CubeScene` latches `stage.frame` on the first
+          // frame of the departure), not the live rect of `.graph-visual`.
+          // Those two diverge: the DOM element is ordinary page content and
+          // rises with the scroll, so by the time the recede is finished it
+          // has moved most of a viewport away from where the graph visibly
+          // collapsed. Emerging from the DOM rect would put the sigil hundreds
+          // of pixels above the last of the graph — a flyer arriving from
+          // nowhere, which is the opposite of the point.
+          //
+          // Off that branch there is no anchored scene and `.graph-still` does
+          // scroll with the page, so its own rect is the correct source.
+          const srcX = stage.live ? stage.frame.x : g.left + g.width / 2;
+          const srcY = stage.live ? stage.frame.y : g.top + g.height / 2;
 
-          // Peel off the node over the first quarter, then ride a viewport
-          // path. The arc is a half sine so the flyer leaves and rejoins the
-          // centre line rather than sliding sideways and staying there.
-          const detach = smoothstep(clamp01((p - 0.04) / 0.24));
-          const run = clamp01((p - 0.06) / 0.54);
+          // THE TRAVEL STARTS WHERE THE RECEDE FINISHES, not alongside it.
+          //
+          // Client: "the small seed appears even before the graph has shrunk
+          // when scrolling to the orchestrator part." Measured on the previous
+          // build at 40px steps, the overlap ran from scrollY 4302 to 4582 —
+          // at 4382 the flyer was at 93.6% opacity with the graph still at its
+          // full 336x471px, and by 4422 it was fully opaque and had already
+          // travelled 19px. That is 280px of scroll showing a small seed
+          // leaving an intact full-size graph, which is two objects, not one.
+          //
+          // The cause was that the flyer's own ramps were keyed to `p` while
+          // the recede was keyed to `p` separately, and the flyer's ran first:
+          // it was fully opaque by p = 0.12 and the recede did not even begin
+          // until p = 0.115. Both are now keyed so the recede strictly leads —
+          // `detach` opens at p = 0.23, which is exactly where `depart`
+          // completes below, and the flyer's opacity is gated on `depart`
+          // itself rather than on `p` at all (see `entry`).
+          const detach = smoothstep(clamp01((p - 0.23) / 0.22));
+          const run = clamp01((p - 0.23) / 0.43);
           const pathX =
             contentLeft + contentW * (0.5 + 0.11 * Math.sin(run * Math.PI));
           const pathY = vh * lerp(0.4, 0.52, run);
@@ -269,65 +297,68 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
 
           // ---- WRITES ----
           const fade = smoothstep(clamp01((p - 0.86) / 0.14));
-          // THE DETACH IS A CROSSFADE, NOT A SWITCH.
-          //
-          // v1 snapped the flyer to opacity 1 the first frame past p = 0 while
-          // the graph's node was still at 1, which put two copies of the same
-          // sigil on the same pixels at full strength — and because each `Orb`
-          // runs its own idle rotation at its own phase, the two rings beat
-          // against each other and the node visibly doubled for a frame.
-          //
-          // Complementary opacities over the same short window instead, which
-          // is exactly what the Seed -> Graph leg does at its own handover.
-          // The two are the same drawing at the same coordinate and the same
-          // size, so at any point in the ramp they read as one object getting
-          // no brighter and no dimmer — and because `entry` also drives the
-          // node's dim, the sigil looks like it is lifting OUT of the graph
-          // rather than appearing next to it.
-          const entry = smoothstep(clamp01((p - 0.02) / 0.1));
 
           /**
            * THE DEPARTURE. See the long note at the top of this file.
            *
            * Two terms, larger wins.
            *
-           * `byScrub` is the lead and it is what makes this one gesture: it
-           * opens at p = 0.115, which is inside the flyer's own detach window
-           * (0.04 -> 0.28), so the graph starts folding away while the sigil
-           * is visibly peeling out of the middle of it, and it is finished by
-           * p = 0.275 — long before the flyer lands at 0.66. There is
-           * therefore no span of the scroll where a full-size graph and a
-           * small independent sigil are both on screen.
-           *
-           * WHY IT CLOSES SO EARLY. Client, on the first version: "it shrinks
-           * but then the actual graph also moved down". The recede has to be
-           * OVER before the sticky box releases, or the last part of it plays
-           * while the box is also sliding and the two motions read as one
-           * confused one. Measured at 1440x900 with the current spacer the box
-           * releases at scrollY 4716 and this window closes at about 4640 —
-           * 76px of margin, roughly one wheel notch, and `byGeometry` below
-           * guarantees the margin never goes negative.
+           * `byScrub` is the lead. It opens at p = 0.045 — barely past the
+           * moment the graph settles — so that scrolling produces a visible
+           * change essentially immediately in BOTH directions, and closes at
+           * p = 0.23. Client, after the previous pass: "still gets stuck to
+           * the screen when scrolling up and down." A sticky box does not feel
+           * stuck because it is sticky; it feels stuck because nothing about
+           * it changes while you scroll. The dwell spacer came down again
+           * (52vh -> 40vh, see `SeedJourney`) and this window was pulled
+           * forward to cover almost all of what is left, so there is no longer
+           * an inert stretch at either end of it. Reverse scroll gets the same
+           * treatment for free: `depart` is a pure function of scroll position
+           * and the graph re-expands through the identical curve.
            *
            * `byGeometry` is the floor, and it is the reason this cannot rot.
            * A sticky box stops holding the instant its container's bottom edge
            * reaches the bottom of the viewport, so `colBottom` counts down to
-           * exactly `vh` at that moment. This term is finished at 1.06vh —
-           * BEFORE the release rather than at it — so at any viewport height,
-           * and whatever anyone later does to the dwell spacer's length, the
-           * graph is gone by the time the box starts to move. Under the
-           * measured geometry the scrub term gets there first and the floor
-           * never binds; it exists so that "the graph slid away while it was
-           * still shrinking" is not reachable.
+           * exactly `vh` at that moment. This term finishes at 1.08vh — BEFORE
+           * the release rather than at it — so at any viewport height, and
+           * whatever anyone later does to the dwell spacer, the graph is gone
+           * by the time the box starts to move. That is what keeps the recede
+           * from ever playing while the box is also sliding, which is the
+           * "it shrinks but then the actual graph also moved down" bug.
            */
-          const byScrub = smoothstep(clamp01((p - 0.115) / 0.16));
+          const byScrub = smoothstep(clamp01((p - 0.045) / 0.185));
           const byGeometry = smoothstep(
-            clamp01((vh * 1.3 - colBottom) / (vh * 0.24)),
+            clamp01((vh * 1.32 - colBottom) / (vh * 0.24)),
           );
           const depart = Math.max(byScrub, byGeometry);
           // The 3D scene reads this and does the actual receding. One number,
           // written once per frame, no React state — the same contract every
           // other field on `stage.frame` already has.
           stage.frame.depart = depart;
+
+          /**
+           * THE FLYER'S VISIBILITY, GATED ON THE RECEDE ITSELF.
+           *
+           * This is the fix for "the small seed appears even before the graph
+           * has shrunk". It used to be `smoothstep((p - 0.02) / 0.1)` — keyed
+           * to the scrub, and reaching full opacity at p = 0.12 while the
+           * recede had not started. Two independent ramps racing each other,
+           * and the wrong one won.
+           *
+           * It is now a function of `depart` rather than of `p`, which makes
+           * the ordering structural instead of a matter of two numbers
+           * happening to be tuned against each other: the flyer cannot appear
+           * before the graph has gone, because the only thing that can make it
+           * appear IS the graph going. At depart = 0.78 the graph is at 36% of
+           * its size and 22% opacity — a vestige — and that is the first frame
+           * the flyer is anything but fully transparent. It reaches full
+           * strength exactly as the graph reaches zero.
+           *
+           * Re-tuning the recede's own timing can no longer desynchronise
+           * these, and nor can a different viewport height feeding a different
+           * `byGeometry`. There is one clock now.
+           */
+          const entry = smoothstep(clamp01((depart - 0.78) / 0.22));
 
           gsap.set(flyer, { x, y, scale, opacity: entry * (1 - fade) });
           // The flyer swells slightly as it lands, then settles — the same

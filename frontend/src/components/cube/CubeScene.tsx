@@ -81,35 +81,44 @@ const GRAPH_PX = 700;
 const GRAPH_W = 13.2;
 
 /**
- * TWO PALETTES, AND THE SCROLL CROSSFADES BETWEEN THEM.
+ * THE GRAPH IS ALIVE, AND ALIVE MEANS COLOURED.
  *
- * This is the page's colour story in four constants. The clustered formation
- * is THE SEED, and the seed is the one deliberately coloured object on an
- * otherwise black-and-white page — so it burns Ignition, exactly as it does in
- * the flat `CubeSigil` a reader has already seen in the hero. As `spread` runs
- * to 1 and the cluster comes apart into the graph, every cube crossfades to
- * the neutral pair: what the seed BECOMES is structure, and structure belongs
- * to the neutral world the rest of the page lives in.
+ * Client, on the previous pass: "the exploded seed view in graph is still
+ * plain and monotone", then "I want all seed instance to appear colored in a
+ * way that that is the life in everything."
  *
- * The whole argument of the section, in the material: one coloured moment goes
- * in, typed grey structure comes out, and the one thing that stays warm is the
- * node at the centre — which is the seed itself, drawn as `CubeMark`, and
- * which then detaches and carries the colour on to the Orchestrator.
+ * That is a direct correction to the design this file used to carry, which
+ * was: the seed is coloured, and what it BECOMES is neutral grey structure.
+ * That reads well as an argument and it read as dead on the screen. Every node
+ * in this graph is something the seed produced — a person, an organization, a
+ * place pulled out of one sentence — so every node carries the seed's own
+ * colour. Nothing here is waiting for permission to be alive.
  *
- * The neutral pair's spread is deliberately wide (#e8 to #6a). A narrow one
- * would leave the graph looking like a flat silhouette at the small on-screen
- * sizes it passes through.
+ * THREE STOPS, NOT TWO. A two-stop ramp over thirty-four cubes gives a field
+ * that is essentially one colour with a slight lean. Running warm gold through
+ * coral into crimson gives the mass a real internal range, so it reads as many
+ * distinct objects lit by the same fire rather than as one tinted blob.
+ *
+ * AND A FALLOFF FROM THE CORE. Each cube's heat is scaled by `gr`, its
+ * distance from the graph's own centre — hottest at the middle, where the
+ * seed's own node is, deepening outward. That falloff is itself multiplied by
+ * `spread`, so the CLUSTER is uniformly hot (all of it is the seed) and the
+ * gradient only emerges as it disperses. The seed's life radiating out into
+ * the structure it produced, which is the one thing this section is about.
+ *
+ * WHAT PROMOTION DOES is therefore no longer "gains a colour" — everything has
+ * one. It is a shift OFF this family entirely, into the bright neutrals of
+ * `ARCHETYPE_TONE`. See the note over that map.
  */
-const SEED_A = new THREE.Color("#ff6a3d");
-const SEED_B = new THREE.Color("#e6265a");
-const NODE_A = new THREE.Color("#e8e8e8");
-const NODE_B = new THREE.Color("#6a6a6a");
-/** Edges: dimmer than the dimmest node, so the web reads behind them. They
- *  only exist once the graph exists, so they are never anything but grey. */
-const EDGE_COLOR = new THREE.Color("#8a8a8a");
+const HEAT_HOT = new THREE.Color("#ffb03d");
+const HEAT_MID = new THREE.Color("#ff6a3d");
+const HEAT_DEEP = new THREE.Color("#e6265a");
+/** Relationships are what the seed produced too, so the web is warm as well —
+ *  a shade under the nodes it joins, so it reads behind them. */
+const EDGE_COLOR = new THREE.Color("#ff8a5c");
 /** What a cube turns as a story line goes into it. The brightest thing on
  *  screen for a moment, which is what "this one just took the text" needs. */
-const EATEN_COLOR = new THREE.Color("#ffd9c2");
+const EATEN_COLOR = new THREE.Color("#ffe4cf");
 /** The selected node's lift. Small, and toward white — see the note below. */
 const SELECT_COLOR = new THREE.Color("#ffffff");
 
@@ -201,7 +210,7 @@ function Formation({
       mesh: meshRefs.current[i] as THREE.Mesh,
       drag: new THREE.Vector3(),
       at: new THREE.Vector3(c.p[0], c.p[1], c.p[2]),
-      color: SEED_A.clone().lerp(SEED_B, c.t),
+      color: HEAT_HOT.clone().lerp(HEAT_DEEP, c.t),
       spin: 0,
     })).filter((r) => r.mesh);
   }, []);
@@ -320,9 +329,9 @@ function Formation({
   const tmp = useMemo(() => new THREE.Vector3(), []);
   const target = useMemo(() => new THREE.Color(), []);
   /** Scratch for the neutral end of the seed -> node crossfade. */
-  const node = useMemo(() => new THREE.Color(), []);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
+    const clock = state.clock.elapsedTime;
     const g = group.current;
     if (!g || runtime.current.length === 0) return;
 
@@ -458,27 +467,43 @@ function Formation({
         c.rot[2] + rt.spin * 0.3,
       );
 
-      // SEED -> NODE, crossfaded by the same `spread` that pulls the cluster
-      // apart. Ignition while it is the seed, grey once it is a graph node.
-      // Both ends use the cube's own `c.t` position along its pair, so the
-      // per-cube variation that gives the formation its form survives the
-      // crossfade rather than collapsing at the halfway point.
+      // THE HEAT. Gold -> coral -> crimson by this cube's own `c.t`, then
+      // dimmed by how far out in the graph it sits, then that falloff scaled
+      // by `spread` so the cluster is uniformly hot and the gradient only
+      // appears as it disperses. See the note over the constants.
       //
-      // A promoted node takes its archetype's step off the four-step grey ramp
-      // in `ARCHETYPE_TONE`. Four steps are readable side by side, but they
-      // are deliberately NOT asked to carry the archetype on their own: the
-      // promoted cube is also a fifth bigger, holds a spin the others do not,
-      // and the panel that did the promoting names it in text and re-announces
-      // it through `aria-live`. The brightness is the glanceable summary, not
-      // the record. Promotion only happens after the graph has settled, so it
-      // never fights the crossfade — by then `spread` is 1.
-      if (promoted) target.set(ARCHETYPE_TONE[promoted] ?? "#f0f0f0");
+      // A promoted node leaves the family entirely for its archetype's bright
+      // neutral. That IS the payoff of the interaction: against thirty-three
+      // warm cubes a cold white one is unmissable, where under the previous
+      // all-grey scheme a promoted node and its neighbours differed by a step
+      // of value nobody could see. It is not asked to carry WHICH archetype on
+      // its own either — the promoted cube is a fifth bigger, holds a spin the
+      // others do not, and the panel names it in text and re-announces it
+      // through `aria-live`.
+      if (promoted) target.set(ARCHETYPE_TONE[promoted] ?? "#ffffff");
       else {
-        target.copy(SEED_A).lerp(SEED_B, c.t);
-        node.copy(NODE_A).lerp(NODE_B, c.t);
-        target.lerp(node, spread);
+        if (c.t < 0.5) target.copy(HEAT_HOT).lerp(HEAT_MID, c.t * 2);
+        else target.copy(HEAT_MID).lerp(HEAT_DEEP, (c.t - 0.5) * 2);
+        target.multiplyScalar(1 - 0.34 * c.gr * spread);
       }
-      if (eaten > 0) target.lerp(EATEN_COLOR, eaten * 0.8);
+      // THE SWALLOW FLASH IS A MOMENT, NOT A STATE.
+      //
+      // `f.eaten[slot]` is latched at 1 once a story line has gone in and
+      // never comes back down, which used to leave the five entity cubes
+      // permanently lerped 80% toward cream. On the old grey graph that read
+      // as "these five are the important ones". On a warm graph where
+      // promotion is signalled by shifting to a bright neutral, it reads as
+      // five nodes that are already promoted — the exact confusion the new
+      // scheme exists to avoid, and it was visible in the settled graph as
+      // five white cubes among thirty warm ones.
+      //
+      // Scaling it by `(1 - spread)` keeps the flash exactly where it means
+      // something — the instant of absorption, while the cluster is still a
+      // cluster — and returns the cube to the heat ramp as it disperses. What
+      // an entity keeps into the graph is the part that never conflicted:
+      // it is larger, it spins harder, and it burns hotter (see the emissive
+      // term below), all of which stay inside the Ignition family.
+      if (eaten > 0) target.lerp(EATEN_COLOR, eaten * 0.8 * (1 - spread));
       // A light touch toward white for the selected node, not a wash. This was
       // 0.22 because a heavier one used to wash a promoted cube's hue out;
       // with a value ramp the constraint is if anything tighter — pushing a
@@ -491,8 +516,39 @@ function Formation({
       const mat = rt.mesh.material as THREE.MeshStandardMaterial;
       mat.color.copy(rt.color);
       mat.emissive.copy(rt.color);
+
+      // THE BREATHING, and this is the other half of "the life in everything".
+      //
+      // Colour alone makes a still image look alive; a graph a reader is
+      // sitting in front of for half a screen of scrolling needs to actually
+      // move. Every unpromoted node runs its own slow emissive swell, at its
+      // own rate and its own phase — both derived from `c.t`, so they are
+      // deterministic, never in step with each other, and cost one sine per
+      // cube per frame. The result is a field of embers rather than a lit
+      // diagram, which is the difference between "coloured" and "alive".
+      //
+      // It is scaled by `spread`: the clustered seed is a solid object and
+      // should read as one, and the shimmer only comes up as the mass opens
+      // into a constellation with space between the nodes to see it in.
+      //
+      // Promoted nodes do NOT breathe. They hold a steady, brighter emissive —
+      // awake and listening rather than idling — which is one more axis of
+      // difference between a node that has been woken up and one that has not,
+      // and it costs nothing because the branch is already here.
+      //
+      // Nothing here needs a reduced-motion branch: `CubeStage` refuses to
+      // mount this scene at all under `prefers-reduced-motion: reduce`, so
+      // this loop does not exist on that path.
+      const breath = promoted
+        ? 0
+        : Math.sin(clock * (0.55 + c.t * 0.7) + c.t * 23.3) * 0.5 + 0.5;
       mat.emissiveIntensity =
-        0.22 + eaten * 0.9 + (promoted ? 0.5 : 0) + (sel === i ? 0.35 : 0);
+        0.26 +
+        0.2 * breath * spread +
+        0.18 * (1 - c.gr) * spread +
+        eaten * 0.9 +
+        (promoted ? 0.62 : 0) +
+        (sel === i ? 0.35 : 0);
     }
 
     // ---- edges follow whatever the cubes did ----
@@ -621,12 +677,22 @@ function Formation({
           position={c.p}
           scale={c.s}
         >
+          {/* PER-CUBE SURFACE, not one shared finish.
+              Every cube used to carry identical roughness and metalness, which
+              at thirty-four objects under two lights is what made the mass
+              read as flat matte no matter what colour it was. Spreading
+              roughness from 0.16 to 0.68 off the cube's own `t` means some
+              faces catch a hard specular off the key light and others stay
+              velvet, so the formation reads as faceted and dimensional.
+              Metalness stays low and only varies a little: there is no
+              environment map in this scene, and a genuinely metallic surface
+              with nothing to reflect renders black. */}
           <meshStandardMaterial
-            color={SEED_A}
-            emissive={SEED_A}
-            emissiveIntensity={0.22}
-            roughness={0.42}
-            metalness={0.12}
+            color={HEAT_MID}
+            emissive={HEAT_MID}
+            emissiveIntensity={0.26}
+            roughness={0.16 + c.t * 0.52}
+            metalness={0.08 + (1 - c.t) * 0.12}
             flatShading
           />
           {/* Every cube keeps its own wireframe outline. The page's whole
@@ -690,13 +756,19 @@ export default function CubeScene({
         camera={{ fov: FOV, position: [0, 0, CAM_Z], near: 0.1, far: 200 }}
         onCreated={() => onReady?.()}
       >
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[6, 9, 8]} intensity={1.5} />
-        {/* The fill light was a cyan bounce, which on a monochrome page is the
-            one light that could put a hue back into every cube no matter what
-            the materials said. Neutral white at the same intensity keeps the
-            two-sided modelling — the thing the second light is actually for —
-            without tinting the shadow side. */}
+        {/* 0.55 -> 0.38. Ambient light lifts every face by the same amount,
+            which is exactly what flattens a scene: at 0.55 the shadow side of
+            a cube was close enough to its lit side that the varied roughness
+            below had almost nothing to show. Dropping it widens the gap
+            between the lit and unlit faces, so the facets and the speculars
+            actually read and the graph looks modelled rather than printed. */}
+        <ambientLight intensity={0.38} />
+        <directionalLight position={[6, 9, 8]} intensity={1.6} />
+        {/* The fill light was a cyan bounce, which is the one light that could
+            put a hue back into every cube no matter what the materials said.
+            Neutral white keeps the two-sided modelling — the thing the second
+            light is actually for — without tinting the shadow side, and the
+            nodes now carry their own colour anyway. */}
         <directionalLight position={[-8, -3, -6]} intensity={0.5} color="#ffffff" />
         <Formation hit={hitRef} onHover={setGrabbing} />
       </Canvas>

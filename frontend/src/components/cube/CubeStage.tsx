@@ -160,7 +160,17 @@ export function CubeStage() {
       // The rect test stays as the second condition because `depart` is only
       // ever written on the wide, motion-allowed branch; without it a build
       // where the relay never ran would leave the panel up forever.
-      const leaving = stage.frame.depart > 0.02;
+      //
+      // 0.45 rather than a hair above zero, and it is a deliberate trade. The
+      // departure now opens about 60px past the settle point — that is what
+      // stops the zone feeling stuck — so a threshold near zero would give the
+      // controls a 60px window and make them flash past. At depart = 0.45 the
+      // graph is still at 63% of its size and 55% opacity: unmistakably the
+      // graph, and perfectly draggable. So the controls are offered for the
+      // whole of the early, barely-perceptible part of the recede and withdraw
+      // once it is genuinely going, which is the honest reading of "this is
+      // yours to move until you decide to move on".
+      const leaving = stage.frame.depart > 0.45;
       const held =
         !leaving &&
         (col ? col.getBoundingClientRect().bottom > window.innerHeight : false);
@@ -431,15 +441,16 @@ export function CubeStage() {
                 const active = sel !== null && promotions[sel] === a.id;
                 return (
                   <li key={a.id}>
-                    {/* SELECTED IS BRIGHTER AND HEAVIER, not a different hue.
-                        `aria-pressed` already carries the state to assistive
-                        tech; for everyone else the pressed button goes to a
-                        white border, white label and a faint white fill while
-                        the others stay on the default hairline and --ink-dim.
-                        The swatch beside each name is that archetype's own
-                        step off the `ARCHETYPE_TONE` value ramp, so it matches
-                        the brightness the node in the graph actually turns —
-                        it is a preview of the result, not a colour key. */}
+                    {/* SELECTED TAKES THAT ARCHETYPE'S OWN COLOUR, not a
+                        generic white. `aria-pressed` already carries the
+                        state to assistive tech; for everyone else the
+                        pressed button's border, label and swatch all move to
+                        the same hue the node in the graph actually turns, so
+                        pressing "Wildcard" and seeing the graph's promoted
+                        cube go pink is one visible fact, not two unrelated
+                        white and colourful ones. The swatch beside each name
+                        is always that archetype's colour, active or not — a
+                        preview of the result before you commit to it. */}
                     <button
                       type="button"
                       disabled={sel === null}
@@ -448,11 +459,20 @@ export function CubeStage() {
                         sel !== null &&
                         selection.promote(sel, active ? null : a.id)
                       }
+                      style={
+                        active
+                          ? {
+                              borderColor: ARCHETYPE_TONE[a.id],
+                              color: ARCHETYPE_TONE[a.id],
+                              background: `color-mix(in srgb, ${ARCHETYPE_TONE[a.id]} 12%, transparent)`,
+                            }
+                          : undefined
+                      }
                       className={[
                         "flex items-center gap-2 border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
                         "hud-label",
                         active
-                          ? "border-[color:var(--ink-accent)] bg-[rgba(245,245,245,0.08)] text-[color:var(--ink-accent)]"
+                          ? ""
                           : "border-line text-ink-dim hover:border-[color:var(--line-strong)] hover:text-ink",
                       ].join(" ")}
                     >

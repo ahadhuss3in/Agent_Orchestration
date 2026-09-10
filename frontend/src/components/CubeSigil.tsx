@@ -20,28 +20,26 @@ import { isoSeed, isoGraph, isoGraphPoint, GRAPH_EDGES_3D } from "@/lib/cubes";
  * JS disabled entirely, and under `prefers-reduced-motion: reduce` where the
  * WebGL scene is never even imported.
  *
- * COLOUR, v4.1, AND IT DEPENDS WHICH OBJECT THIS IS DRAWING.
+ * COLOUR: IGNITION, IN BOTH STATES.
  *
- * This component draws two different things out of the same cell list, and the
- * page now treats them differently on purpose:
+ * This component draws two things out of the same cell list — the clustered
+ * seed and the dispersed graph — and for one pass they were deliberately
+ * different, the seed warm and the graph neutral, on the argument that what
+ * the seed BECOMES is structure and structure belongs to the monochrome world.
+ * The client's read on the built version: "the exploded seed view in graph is
+ * still plain and monotone", and then "I want all seed instance to appear
+ * colored in a way that that is the life in everything."
  *
- *   THE SEED (default)   Ignition. The seed is the page's protagonist and the
- *                        one deliberately coloured object in an otherwise
- *                        strictly black-and-white page — see the note at the
- *                        top of `globals.css`. It is warm in the hero, warm
- *                        travelling down the Seed section, warm as the mark on
- *                        the Orchestrator's staff.
- *   THE GRAPH (`graph`)  monochrome. What the seed becomes is structure, and
- *                        structure is part of the neutral world: thirty-four
- *                        typed nodes and their relationships, drawn in the
- *                        same greys as every other diagram on the page. The
- *                        one thing that stays warm in it is the central node,
- *                        which is the seed itself and is drawn by `CubeMark`,
- *                        not here.
+ * They are right, and the argument was too clever. Every node in that graph is
+ * something the seed produced — a person, an organization, a place pulled out
+ * of one sentence. Draining the colour out of them said "and then it died".
+ * Both states now carry Ignition, which also keeps this flat fallback matching
+ * the WebGL scene it stands in for; that scene's own note explains the heat
+ * ramp in more detail.
  *
- * That split is the whole story of the page in two palettes: one coloured
- * moment goes in, neutral structure comes out, and the coloured thing carries
- * on through it.
+ * Everything else on the page stays black and white. One coloured lineage
+ * running through a neutral world is the design; the graph is part of the
+ * lineage, not part of the world.
  */
 
 /** Face shading. One tone, three values, so the form reads without a light. */
@@ -72,7 +70,7 @@ export function CubeSigil({
   const scale = graph ? 16 : 20;
   const cubes = graph ? isoGraph(scale) : isoSeed(scale);
   /** The two shaded faces. Neutral for the graph, Ignition for the seed. */
-  const side = graph ? "#9c9c9c" : "var(--seed-b)";
+  const side = "var(--seed-b)";
 
   return (
     <svg
@@ -88,42 +86,30 @@ export function CubeSigil({
             currently flying over would make it dim in Simulation and bright in
             Seed for no reason a reader could name. It looks the same
             everywhere, which is what makes it recognisable as one object. */}
+        {/* Three stops, matching the WebGL scene's heat ramp: warm gold into
+            coral into crimson. Two stops over thirty-four cubes gives a field
+            that is one colour with a slight lean; three gives it a real
+            internal range, so the mass reads as many objects lit by the same
+            fire rather than as a tinted blob. */}
         <linearGradient id={g} x1="0%" y1="0%" x2="100%" y2="100%">
-          {graph ? (
-            <>
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="42%" stopColor="#e0e0e0" />
-              <stop offset="100%" stopColor="#9c9c9c" />
-            </>
-          ) : (
-            <>
-              <stop offset="0%" stopColor="#ffb08a" />
-              <stop offset="42%" stopColor="var(--seed-a)" />
-              <stop offset="100%" stopColor="var(--seed-b)" />
-            </>
-          )}
+          <stop offset="0%" stopColor="#ffb03d" />
+          <stop offset="46%" stopColor="var(--seed-a)" />
+          <stop offset="100%" stopColor="var(--seed-b)" />
         </linearGradient>
         <radialGradient id={halo} cx="50%" cy="50%" r="50%">
-          {graph ? (
-            <>
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.2" />
-              <stop offset="52%" stopColor="#ffffff" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-            </>
-          ) : (
-            <>
-              <stop offset="0%" stopColor="var(--seed-a)" stopOpacity="0.34" />
-              <stop offset="52%" stopColor="var(--seed-b)" stopOpacity="0.14" />
-              <stop offset="100%" stopColor="var(--seed-b)" stopOpacity="0" />
-            </>
-          )}
+          <stop offset="0%" stopColor="var(--seed-a)" stopOpacity="0.34" />
+          <stop offset="52%" stopColor="var(--seed-b)" stopOpacity="0.14" />
+          <stop offset="100%" stopColor="var(--seed-b)" stopOpacity="0" />
         </radialGradient>
       </defs>
 
       <circle cx="0" cy="0" r="118" fill={`url(#${halo})`} />
 
+      {/* The relationships are what the seed produced too, so the web is warm
+          as well — a shade under the nodes it joins, so it reads behind them
+          rather than competing. */}
       {edges && (
-        <g stroke="#8a8a8a" strokeOpacity="0.42" strokeWidth="0.9">
+        <g stroke="#ff8a5c" strokeOpacity="0.42" strokeWidth="0.9">
           {GRAPH_EDGES_3D.map(([a, b], i) => {
             const p1 = isoGraphPoint(a, scale);
             const p2 = isoGraphPoint(b, scale);

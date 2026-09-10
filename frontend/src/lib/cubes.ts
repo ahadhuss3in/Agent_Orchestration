@@ -124,6 +124,19 @@ export type Cube = {
   g: [number, number, number];
   /** 0..1 along the accent ramp — drives the Ignition gradient mix. */
   t: number;
+  /**
+   * 0..1 distance from the GRAPH's own centre: 0 at the middle, 1 at the
+   * furthest node. Derived after re-centring, because it is measured from the
+   * origin the graph is actually drawn around.
+   *
+   * What reads it: the scene runs the heat of each node off this, so the
+   * graph is hottest at its core — where the seed's own node is — and deepens
+   * outward. That falloff is itself scaled by `spread`, so the CLUSTER is
+   * uniformly hot (all of it is the seed) and the gradient only appears as it
+   * disperses. It is the seed's life radiating out into the structure it
+   * produced, which is the one thing this section is about.
+   */
+  gr: number;
 };
 
 /**
@@ -142,7 +155,7 @@ export type Cube = {
  */
 export const STORY_CUBES = [30, 3, 15, 21, 26] as const;
 
-function buildCubes(): Cube[] {
+function buildCubes(): Omit<Cube, "gr">[] {
   const rand = rng(0x5eed1701);
 
   // The graph layout. A flattened shell rather than a ball: the reader is
@@ -213,18 +226,26 @@ function buildCubes(): Cube[] {
  * here, fixes it for the mesh, the isometric still and the handoff at the same
  * time, because all three read these same numbers.
  */
-function centred(cubes: Cube[]): Cube[] {
-  const mean = (pick: (c: Cube) => [number, number, number], axis: 0 | 1 | 2) =>
+function centred(cubes: Omit<Cube, "gr">[]): Cube[] {
+  type Raw = Omit<Cube, "gr">;
+  const mean = (pick: (c: Raw) => [number, number, number], axis: 0 | 1 | 2) =>
     cubes.reduce((sum, c) => sum + pick(c)[axis], 0) / cubes.length;
 
   const pc = [mean((c) => c.p, 0), mean((c) => c.p, 1), mean((c) => c.p, 2)];
   const gc = [mean((c) => c.g, 0), mean((c) => c.g, 1), mean((c) => c.g, 2)];
 
-  return cubes.map((c) => ({
+  const moved = cubes.map((c) => ({
     ...c,
-    p: [r4(c.p[0] - pc[0]), r4(c.p[1] - pc[1]), r4(c.p[2] - pc[2])],
-    g: [r4(c.g[0] - gc[0]), r4(c.g[1] - gc[1]), r4(c.g[2] - gc[2])],
+    p: [r4(c.p[0] - pc[0]), r4(c.p[1] - pc[1]), r4(c.p[2] - pc[2])] as [number, number, number],
+    g: [r4(c.g[0] - gc[0]), r4(c.g[1] - gc[1]), r4(c.g[2] - gc[2])] as [number, number, number],
   }));
+
+  // `gr` has to be derived HERE and not in `buildCubes`, because it is a
+  // distance from the origin and the origin only becomes the graph's real
+  // centre one line above this.
+  const radius = (c: Raw) => Math.hypot(c.g[0], c.g[1], c.g[2]);
+  const rMax = Math.max(...moved.map(radius)) || 1;
+  return moved.map((c) => ({ ...c, gr: r4(radius(c) / rMax) }));
 }
 
 export const SEED_CUBES: Cube[] = centred(buildCubes());
@@ -363,49 +384,66 @@ export const PERSONA_CLUSTERS: Record<FigureId, PersonaCluster> = {
  * ------------------------------------------------------------------ */
 
 /**
- * One TONE per assignable archetype. Four steps of grey, not four hues.
+ * THE PROMOTED TREATMENT. What a node turns into when a human wakes it up.
  *
- * WHAT THIS USED TO BE AND WHY IT CHANGED. Through v3 these were four visibly
- * different hues — Wire blue, Signal cyan, Aurum gold, Pulse mint — and the
- * argument for them was that a promoted node should be identifiable at a
- * glance without a legend. The page is monochrome now, so that argument has to
- * be met a different way, and the honest answer is that it was never
- * colour-only in the first place and should not have leaned on colour as hard
- * as it did:
+ * THIS IS NOW A CONTRAST, NOT A LABEL, and that is the whole point of it.
+ * Every node in the graph carries the seed's own Ignition colour — the graph
+ * is alive and warm all over, because every node in it is something the seed
+ * produced. So promotion cannot be signalled by "having a colour"; everything
+ * already has one. It is signalled by SHIFTING OFF the family: a promoted node
+ * leaves the warm field entirely for a bright neutral, gains a fifth of its
+ * size, holds a spin the others do not, and stops breathing with the rest of
+ * the graph. Against thirty-three coral and crimson cubes, one cold white one
+ * is the loudest thing on the screen — which is what an interaction that
+ * decides who gets to speak should look like.
  *
- *   SHAPE     every archetype already has its own authored cube cluster
- *             (`PERSONA_CLUSTERS` above) whose silhouette says what it does —
- *             a climbing stair, an off-true block, a closed square, six cells
- *             touching nothing. That is the primary identifier everywhere a
- *             figure is drawn, and it always was.
- *   TEXT      the name is beside the figure on every card, in the transcript,
- *             and in the promotion panel's `aria-live` readout.
- *   VALUE     these four steps, which is what is left for the one place shape
- *             cannot help: a promoted cube in the 3D graph, where every node
- *             is the same box.
+ * REVISED. The single neutral brightness ramp this comment used to describe
+ * (four steps of grey, "not Ignition any more") tested as flat and lifeless —
+ * client feedback, in as many words: promoted nodes read as "the white
+ * color", and the Agents section's Orchestrator and archetype clusters
+ * needed real colour too, not a brightness step. So this is back to five
+ * genuine hues — not the same values the old v3 rainbow used (this page has
+ * moved on from that palette since), but the same idea: each archetype, plus
+ * the Orchestrator, gets its own real colour, distinct from the other four,
+ * from the Orchestrator's, and from Ignition (the seed's own coral-to-crimson
+ * pair, which stays reserved for the seed's own lineage and is never reused
+ * here).
  *
- * The steps are evenly spaced and none of them is near either end of the
- * scale, so no archetype reads as "the important one" — the ramp is an
- * identifier, not a ranking. Measured on --paper-raised #141414, as graphics
- * rather than as text: #f0f0f0 17.6:1, #cdcdcd 12.0:1, #ababab 7.9:1,
- * #888888 5.2:1. All four clear the 3:1 a non-text graphic needs with room,
- * and the dimmest is still legible as a value against the brightest.
+ * WHICH archetype still does not rest on colour alone — that discipline did
+ * not depend on the ramp being grey, and it is kept:
+ *
+ *   SHAPE   every archetype has its own authored cube cluster
+ *           (`PERSONA_CLUSTERS` above) — a climbing stair, an off-true block,
+ *           a closed square, six cells touching nothing. That is the primary
+ *           identifier everywhere a figure is drawn.
+ *   TEXT    the name is beside the figure on every card, in the transcript,
+ *           and in the promotion panel's `aria-live` readout.
+ *   COLOUR  now a real, distinct hue per archetype as well, both for the one
+ *           place shape cannot help — a promoted cube in the 3D graph, where
+ *           every node is the same box — and as the identity the Agents
+ *           section's cards and the Orchestrator itself now carry.
+ *
+ * Measured as graphics (the 3:1 a non-text swatch/cube-material needs) on
+ * --paper-raised #141414: gold 10.1:1, blue 5.7:1, cyan 8.5:1, green 7.9:1,
+ * pink 5.2:1. The blue is lifted a step brighter than a "pure" blue would be
+ * specifically so it also clears 4.5:1, in case it is ever set as text rather
+ * than only a fill.
  *
  * Lives here, in the geometry module, rather than in the WebGL scene: the
- * Agents section tones its persona clusters from this too, and it must not
- * have to pull three.js into its bundle to learn how bright a Skeptic is.
+ * Agents section tones its persona clusters (and the Orchestrator's) from
+ * this too, and it must not have to pull three.js into its bundle to learn
+ * what colour a Skeptic is.
  *
- * The Orchestrator is not one of the four on purpose. It is not assignable —
- * it is a system role the engine supplies — and it sits at pure white, off the
- * top of the ramp, which is the same "outside the menu" statement its gold
- * used to make.
+ * The Orchestrator is still not one of the four — it is a system role the
+ * engine supplies, never assignable — so it keeps its own gold, distinct from
+ * all four archetype hues, rather than sharing one of theirs.
  */
 export const ARCHETYPE_TONE: Record<string, string> = {
-  strategist: "#f0f0f0",
-  skeptic: "#cdcdcd",
-  loyalist: "#ababab",
-  wildcard: "#888888",
-  orchestrator: "#ffffff",
+  strategist: "#5b8aff",
+  skeptic: "#00c2d1",
+  loyalist: "#00c27a",
+  wildcard: "#ff2d78",
+  orchestrator: "#f2b705",
 };
 
 /* ------------------------------------------------------------------ *
