@@ -9,8 +9,12 @@ import { WaitlistDialog } from "./WaitlistDialog";
  * fake logo wall, no invented metrics — the waitlist is a real form posting
  * to a real route (`/api/waitlist`), not a decorative button.
  *
- * This and the Recap row are the only two places `--grad-recap`'s Spectrum
- * sweep appears — it is the finale colour, not a fifth section accent.
+ * This and the Recap row are the only two places `--grad-recap` appears. It
+ * used to be a four-hue Spectrum sweep through every section's accent in
+ * order — the page's colour legend, restated as a finale. With one palette
+ * there is no legend to restate, so it is a dark-to-white tonal sweep instead
+ * and it means something simpler and more useful: the pipeline running to its
+ * end.
  */
 
 const FOOTER_LINKS = [
@@ -73,7 +77,13 @@ export function CtaFooter() {
             <span
               aria-hidden="true"
               className="inline-block h-2.5 w-2.5 rotate-45 rounded-[1px]"
-              style={{ background: "linear-gradient(140deg, #ff6a3d, #2f6bff)" }}
+              /* THE BRAND MARK. Ignition, like the seed — this and the seed
+                 are the two things the monochrome pass deliberately exempts,
+                 because a logo that is the same grey as the footer rule beside
+                 it is not a logo. */
+              style={{
+                background: "linear-gradient(140deg, var(--seed-a), var(--seed-b))",
+              }}
             />
             <span className="display-sm text-sm text-ink">PANTHEON</span>
           </div>

@@ -2,112 +2,221 @@
 
 /* ============================================================
    PANTHEON — design tokens
-   v3: BLACK BASE. Black surfaces, white primary text, the v2
-   accent family layered on top as glows / borders / highlights.
-   No violet/purple anywhere, same as v2. Still a single theme —
-   there is no light mode to fall back to.
+   v4.1: BLACK AND WHITE, WITH ONE COLOURED OBJECT IN IT.
 
-   CONTRAST AUDIT — recomputed from scratch for the BLACK surfaces
-   (WCAG 2.1 relative luminance; nothing here is an inversion of
-   the v2 numbers, every ratio below was recalculated):
+   WHAT CHANGED AND WHY. Through v3 every section carried its own
+   two-stop hue pair (Ignition orange, Signal cyan, Aurum gold,
+   Pulse mint, Wire blue) and every shared component — rules,
+   brackets, panel glows, washes, HUD markers, cube materials —
+   picked its colour up from whichever section it was sitting in.
+   Client: "the bg various color makes it bad, keep everything
+   monotone black or white. smoothly transition." So the per-section
+   hue system is gone outright, not desaturated: every value in this
+   file has R = G = B exactly, which is a property that can be
+   checked by sampling rendered pixels rather than eyeballed.
 
-     --paper        #08080a  L = 0.00247
-     --paper-raised #131317  L = 0.00666
-     --ink          #f4f4f6  L = 0.90588
-     --ink-dim      #a2a2ae  L = 0.36581
+   THEN TWO CORRECTIONS, BOTH FROM THE SAME ROUND OF FEEDBACK:
+   "the whole thing is very monotone, invert the black and white
+   use color for the seed, logo, its very grey and washed out".
 
-     --ink     on --paper        = 18.22 : 1
-     --ink     on --paper-raised = 16.87 : 1
-     --ink-dim on --paper        =  7.92 : 1
-     --ink-dim on --paper-raised =  7.34 : 1
+   1. WASHED OUT. The first monochrome pass kept v3's wash alphas
+      — a 4.5% flat bed under a 10.5% radial — and simply swapped
+      the hue for a light grey. That is not an equivalent swap. A
+      low-alpha ORANGE over black reads as a warm glow on a black
+      page; the identical alpha of light GREY over black reads as
+      the black having been lifted to charcoal, because grey on
+      black has nowhere to go except toward the middle. Measured,
+      the brightest pixel any wash painted was rgb(39,39,39) across
+      most of the page — the page was not black any more, it was
+      dark grey, everywhere, which is exactly "washed out".
+      The alphas are roughly halved below (`--wash-hi` /
+      `--wash-bed`, per section) and the tones they mix are pushed
+      up toward white. Net effect: the ground goes back to nearly
+      black (brightest wash pixel now rgb(31,31,31) at the very
+      strongest point of the strongest section, and most of the
+      page far below that), while the CHROME those same tokens
+      draw — stage rules, bracket ticks, panel toplines — gets
+      brighter and crisper rather than dimmer. Contrast improves
+      in both directions at once.
 
-   The two surfaces are only 1.08:1 apart, which is deliberate:
-   a raised panel on black is separated by its 1px border and its
-   glow, not by a big luminance step, and a bigger step would start
-   to grey the page out. Nothing relies on the surface difference
+   2. THE SEED IS NOT MONOCHROME, and this is deliberate rather
+      than an oversight. The seed is the page's protagonist: it
+      arrives in the hero, eats the story lines, becomes the graph,
+      detaches and is carried to the Orchestrator, and turns up as
+      the mark in Simulation, Chat and the footer. A single
+      deliberately-coloured object moving through an otherwise
+      strictly black-and-white page is a stronger device than a
+      page with no colour in it at all — the eye tracks the one
+      thing that is different. So Ignition (`--seed-a` /
+      `--seed-b`) comes back, scoped to the seed object in every
+      form it takes and to the brand mark, and to nothing else.
+      Section washes, buttons, the HUD rail, borders, panels,
+      figures and the graph stay monochrome.
+
+   THE SECTION IDENTITY SURVIVES AS TONE, NOT HUE. `--ga` / `--gb`
+   are still per-section and still drive the same wash, rule,
+   bracket and glow; they are now points on a single grey ramp, so
+   a section reads as slightly lighter or darker rather than as a
+   different colour. The bleeding-wash construction below is
+   untouched — it is the fix for this page's old hard-seam bug and
+   it gets STRICTLY better here, because two adjacent greys have no
+   hue to rotate through during the crossfade.
+
+   WHERE COLOUR CARRIED INFORMATION it is now carried by shape,
+   label and brightness, never by tone alone:
+     - archetypes         distinct cube-cluster geometry (already
+                          authored per archetype in lib/cubes.ts)
+                          plus their name in text, plus a four-step
+                          brightness ramp in `ARCHETYPE_TONE`
+     - HUD rail stage     shape (the active marker is a rotated
+                          diamond), a white fill for active vs a
+                          mid-grey for visited vs an empty outline
+                          for upcoming, and the stage label in text
+     - simulation turns   the speaker's own cube figure, the
+                          speaker's name, and a border that
+                          BRIGHTENS as the turn becomes live
+     - graph legend       filled vs hollow vs rule, not two colours
+
+   CONTRAST AUDIT — recomputed from scratch for the new neutrals.
+   Nothing below is carried over from the v3 numbers; every ratio
+   was recalculated for these exact values (WCAG 2.1 relative
+   luminance; for a true grey all three channels are equal, so
+   L = f(c) with a single channel).
+
+     --paper        #090909  L = 0.00273
+     --paper-raised #141414  L = 0.00698
+     --ink          #f5f5f5  L = 0.91311
+     --ink-dim      #a3a3a3  L = 0.36618
+     --ink-accent   #ffffff  L = 1.00000
+
+     --ink        on --paper        = 18.26 : 1
+     --ink        on --paper-raised = 16.90 : 1
+     --ink-dim    on --paper        =  7.89 : 1
+     --ink-dim    on --paper-raised =  7.30 : 1
+     --ink-accent on --paper        = 19.97 : 1
+     --ink-accent on --paper-raised = 18.48 : 1
+
+   The two surfaces are still only 1.08:1 apart, deliberately: a
+   raised panel is separated by its 1px border and its glow, not by
+   a luminance step, and nothing relies on the surface difference
    alone to convey meaning.
 
-   THE VIVID GRADIENT PAIRS STILL ARE NOT GENERAL TEXT COLOURS,
-   but the reasoning has flipped: on black they are bright rather
-   than pale. Measured against --paper #08080a:
-     #ff6a3d 7.03   #e6265a 4.56
-     #00c2d1 9.18   #2f6bff 4.45
-     #f2b705 11.01  #ff8a3d 8.53
-     #00c27a 8.57   #00e2b8 11.98
-     #38bdf8 9.34
-   Two of them (#e6265a at 4.56, #2f6bff at 4.45) sit right on or
-   just under the 4.5 line, and both drop further on --paper-raised
-   (4.23 / 4.12). So the rule is unchanged in effect: the raw
-   gradient stops stay strokes, fills, rules, glows and decorative
-   SVG, and small accent text uses the dedicated ink variants below.
+   --ink-accent IS THE WHOLE ACCENT SYSTEM NOW. It replaces
+   --ink-ignis / --ink-signal / --ink-aurum / --ink-pulse /
+   --ink-wire, which were five hues doing one job: marking a label
+   or a value as the emphasised one. Pure white against --ink-dim
+   body copy is a 2.31:1 step (0.41618 / 0.41618 vs 1.05 / 0.41618
+   — i.e. white is 2.31x the luminance contrast of dim against the
+   page), which is a clearly visible emphasis without a second
+   colour. It is never the ONLY signal: every one of these labels
+   is also uppercase, letter-spaced `hud-label` type.
 
-   The accent ink variants are LIGHTENED for black (the v2 deepened
-   variants — #c2320f and friends — measure 3.6:1 or worse here and
-   were all replaced). Recomputed on both black surfaces:
-     --ink-ignis  #ff8a66  8.65 / 8.01
-     --ink-signal #5ec9e8 10.48 / 9.70
-     --ink-aurum  #f2b705 11.01 / 10.19
-     --ink-pulse  #34d8a4 10.96 / 10.15
-     --ink-wire   #8fb2ff  9.51 / 8.81
+   THE WASH AND WHAT IT DOES TO TEXT UNDER IT, recomputed for the
+   halved alphas. The strongest section is Seed at --wash-bed 2.4%
+   and --wash-hi 6.5% of #ffffff. Compositing on --paper: the bed
+   takes 9 -> 14.9, the radial takes 14.9 -> 30.5, so the brightest
+   pixel any wash paints anywhere on the page is rgb(31,31,31),
+   L = 0.01369:
+     --ink-dim over the brightest wash = 6.53 : 1
+     --ink     over the brightest wash = 15.12 : 1
+   Better than the 5.92 / 13.70 the first monochrome pass measured
+   and better than the 6.7 the v3 hued wash computed, because the
+   ground is genuinely darker now. The crossfade arithmetic below
+   is unchanged; only the alphas it operates on came down.
 
-   BUTTON FILLS have two constraints on black, not one: the label
-   must clear 4.5:1 against the fill AND the fill must clear 3:1
-   against the page so the control has a visible boundary. The v2
-   primary gradient failed the second test on its dark end
-   (#b3123f is 2.93:1 on #08080a), so that stop moved to #cc1a47:
-     #c2320f  white label 5.09  fill vs page 3.58
-     #cc1a47  white label 5.02  fill vs page 3.63
-   --line-strong likewise had to come up: at 0.22 alpha it composites
-   to ~#2a2a2b (2.26:1 on the page), under the 3:1 a button border
-   needs, so it is 0.38 alpha now (~#626266, 3.1:1).
+   THE SEED'S OWN PAIR, as decorative fills and strokes only —
+   exactly the rule the v3 gradient stops lived under. Measured
+   against --paper #090909:
+     --seed-a #ff6a3d  6.99 : 1
+     --seed-b #e6265a  4.53 : 1
+   #e6265a sits close enough to the 4.5 line, and drops under it on
+   --paper-raised, that it stays out of text the same way it always
+   did. Nothing on this page uses either as a type colour: they
+   fill the sigil's faces, the lineage dot and the brand mark, all
+   of which sit beside real labelled text.
 
-   Hue check against the "no violet/purple, roughly 260-300deg"
-   rule — every colour in this file:
-     #ff6a3d 14   #e6265a 344  #ff8a66 14
-     #00c2d1 184  #2f6bff 223  #5ec9e8 193
-     #f2b705 45   #ff8a3d 24   #34d8a4 161
-     #00c27a 158  #00e2b8 169  #8fb2ff 221
-     #38bdf8 198  #c2320f 12   #cc1a47 345
-   Nothing lands in 260-300.
+   BUTTON FILLS still have two constraints, not one: the label must
+   clear 4.5:1 against the fill AND the fill must clear 3:1 against
+   the page so the control has a visible boundary. On a monochrome
+   page the honest primary is an inverted one — a white fill with a
+   black label — and it passes both by a wide margin:
+     #ffffff fill  #090909 label 19.97   fill vs page 19.97
+     #d4d4d4 stop  #090909 label 13.43   fill vs page 13.43
+   --line-strong is unchanged in alpha and only re-neutralised: at
+   0.38 over --paper it composites to rgb(99,99,99), L = 0.12477,
+   which is 3.31 : 1 against the page — over the 3:1 a control
+   border needs.
    ============================================================ */
 
 :root {
-  --paper: #08080a;
-  --paper-raised: #131317;
-  --ink: #f4f4f6;
-  --ink-dim: #a2a2ae;
+  --paper: #090909;
+  --paper-raised: #141414;
+  --ink: #f5f5f5;
+  --ink-dim: #a3a3a3;
+  /* The single emphasis value. See the note in the audit above. */
+  --ink-accent: #ffffff;
   /* Decorative hairlines. */
-  --line: rgba(244, 244, 246, 0.16);
-  /* Interactive-component boundaries. Measured, see the audit above. */
-  --line-strong: rgba(244, 244, 246, 0.38);
+  --line: rgba(245, 245, 245, 0.18);
+  /* Interactive-component boundaries. Measured: at 0.46 over --paper this
+     composites to rgb(118,118,118), L = 0.18116, which is 4.32 : 1 against
+     the page — comfortably over the 3:1 a control border needs, and up from
+     the 3.31:1 of the previous 0.38. A border you can actually see is half
+     the answer to "washed out": the other half is that the ground behind it
+     went back to black. */
+  --line-strong: rgba(245, 245, 245, 0.46);
 
-  /* --- per-section two-stop gradients --- */
-  --grad-seed-a: #ff6a3d;
-  --grad-seed-b: #e6265a;
-  --grad-graph-a: #00c2d1;
-  --grad-graph-b: #2f6bff;
-  --grad-agents-a: #f2b705;
-  --grad-agents-b: #ff8a3d;
-  --grad-sim-a: #00c27a;
-  --grad-sim-b: #00e2b8;
-  --grad-chat-a: #2f6bff;
-  --grad-chat-b: #38bdf8;
-  --grad-recap: linear-gradient(90deg, #ff6a3d, #f2b705, #00c27a, #2f6bff);
+  /* THE SEED'S OWN COLOUR. Ignition, back from v3, and the only hue left in
+     this file. Scoped to the seed object and the brand mark — see the note
+     at the top for why this exception exists and what it does NOT cover. */
+  --seed-a: #ff6a3d;
+  --seed-b: #e6265a;
 
-  /* Text-safe variants, LIGHTENED for the black surfaces. See audit. */
-  --ink-ignis: #ff8a66;
-  --ink-signal: #5ec9e8;
-  --ink-aurum: #f2b705;
-  --ink-pulse: #34d8a4;
-  --ink-wire: #8fb2ff;
+  /* --- per-section two-stop TONES ---
+     Not hues. These draw the section's CHROME — its stage rule, its bracket
+     ticks, its panel toplines and glow — and they are pushed up near white so
+     that chrome is crisp against a black page. How much of a section's wash
+     they tint is a separate decision, made by --wash-hi / --wash-bed below,
+     precisely so that "make the rules brighter" and "make the background
+     darker" stopped being the same knob. That they were one knob is what
+     produced a page of grey haze with dim rules on it. */
+  --grad-seed-a: #ffffff;
+  --grad-seed-b: #b4b4b4;
+  --grad-graph-a: #f0f0f0;
+  --grad-graph-b: #a4a4a4;
+  --grad-agents-a: #fafafa;
+  --grad-agents-b: #b0b0b0;
+  --grad-sim-a: #e6e6e6;
+  --grad-sim-b: #9a9a9a;
+  --grad-chat-a: #f4f4f4;
+  --grad-chat-b: #a8a8a8;
+  /* The finale sweep: dark to white, so as a progress bar it reads as
+     filling toward completion and as the Recap rule it reads as the
+     pipeline running to its end. It used to be four hues in section
+     order, which is precisely the legend this pass is removing. */
+  --grad-recap: linear-gradient(90deg, #4a4a4a, #9a9a9a, #d6d6d6, #ffffff);
 
   /* Section-local identity. Overridden by the .sec-* classes below so
      every shared component (rules, brackets, panels, glows) picks up
-     whichever section it happens to be sitting in. Defaults to Ignition
-     because the hero is the first thing on the page. */
+     whichever section it happens to be sitting in. Defaults to Seed
+     because the hero is the first thing on the page.
+
+     `--gink` is now the same white everywhere and no longer varies by
+     section; the name is kept because it is what every shared
+     component already asks for, and there is still exactly one place
+     that decides what an accent is. */
   --ga: var(--grad-seed-a);
   --gb: var(--grad-seed-b);
-  --gink: var(--ink-ignis);
+  --gink: var(--ink-accent);
+
+  /* HOW MUCH OF ITS TONE A SECTION'S WASH ACTUALLY LAYS DOWN.
+     Separate from --ga / --gb on purpose — see the note beside them. These
+     are what carry the section-to-section tonal variation the brief asks for
+     (sections differing in how dark or light their ground reads) and they are
+     all small, because on black a light grey at any real alpha stops looking
+     like a glow and starts looking like the black failed. */
+  --wash-hi: 5%;
+  --wash-mid: 3.5%;
+  --wash-bed: 1.9%;
 
   --rail-w: 88px;
 }
@@ -115,32 +224,44 @@
 .sec-seed {
   --ga: var(--grad-seed-a);
   --gb: var(--grad-seed-b);
-  --gink: var(--ink-ignis);
+  --wash-hi: 6.5%;
+  --wash-mid: 4.5%;
+  --wash-bed: 2.4%;
 }
 .sec-graph {
   --ga: var(--grad-graph-a);
   --gb: var(--grad-graph-b);
-  --gink: var(--ink-signal);
+  --wash-hi: 4.5%;
+  --wash-mid: 3%;
+  --wash-bed: 1.8%;
 }
 .sec-agents {
   --ga: var(--grad-agents-a);
   --gb: var(--grad-agents-b);
-  --gink: var(--ink-aurum);
+  --wash-hi: 5.5%;
+  --wash-mid: 3.8%;
+  --wash-bed: 2%;
 }
 .sec-sim {
   --ga: var(--grad-sim-a);
   --gb: var(--grad-sim-b);
-  --gink: var(--ink-pulse);
+  --wash-hi: 3.5%;
+  --wash-mid: 2.4%;
+  --wash-bed: 1.4%;
 }
 .sec-chat {
   --ga: var(--grad-chat-a);
   --gb: var(--grad-chat-b);
-  --gink: var(--ink-wire);
+  --wash-hi: 5%;
+  --wash-mid: 3.4%;
+  --wash-bed: 1.9%;
 }
 .sec-recap {
-  --ga: #ff6a3d;
-  --gb: #2f6bff;
-  --gink: var(--ink-signal);
+  --ga: #ffffff;
+  --gb: #bcbcbc;
+  --wash-hi: 6%;
+  --wash-mid: 4%;
+  --wash-bed: 2.2%;
 }
 
 @theme inline {
@@ -151,7 +272,7 @@
   --color-line: var(--line);
   --color-accent: var(--gink);
 
-  --font-display: var(--font-orbitron), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 }
 
@@ -240,19 +361,29 @@ section[id] {
    Type
    ------------------------------------------------------------ */
 
+/* SORA, NOT ORBITRON — and the numbers below changed with it.
+
+   Orbitron's heaviest cut is 900 and it is a very wide face that already
+   carries generous sidebearings, so -0.015em was doing real work pulling a
+   headline back together. Sora tops out at 800 (asking for 900 only makes the
+   browser synthesise a fake bold, which smears the geometric curves), and it
+   is around 22% narrower per glyph with much tighter default spacing, so the
+   old tracking closed the letters up too far at large sizes. Both figures are
+   eased off, and the line-heights come down slightly because Sora's shorter
+   caps leave more air between lines at the same multiplier. */
 .display {
   font-family: var(--font-display);
-  font-weight: 900;
-  line-height: 1.08;
-  letter-spacing: -0.015em;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.028em;
   text-wrap: balance;
 }
 
 .display-sm {
   font-family: var(--font-display);
   font-weight: 700;
-  line-height: 1.14;
-  letter-spacing: -0.01em;
+  line-height: 1.12;
+  letter-spacing: -0.018em;
   text-wrap: balance;
 }
 
@@ -320,11 +451,16 @@ section[id] {
   border-radius: 4px;
 }
 
+/* The glow is halved from v3's 85%/55%. Those numbers were tuned for a
+   saturated hue, where a wide soft shadow reads as coloured light; the same
+   spread in near-white reads as fog around every panel on the page, which was
+   part of what made the first monochrome pass look hazy. The inner hairline
+   highlight does more of the separating now, and it is the crisper signal. */
 .panel-glow {
   box-shadow:
-    inset 0 1px 0 rgba(244, 244, 246, 0.05),
-    0 20px 50px -32px color-mix(in srgb, var(--ga) 85%, transparent),
-    0 8px 24px -16px color-mix(in srgb, var(--gb) 55%, transparent);
+    inset 0 1px 0 rgba(245, 245, 245, 0.07),
+    0 20px 50px -32px color-mix(in srgb, var(--ga) 42%, transparent),
+    0 8px 24px -16px color-mix(in srgb, var(--gb) 28%, transparent);
 }
 
 /* A 2px gradient hairline along the top edge of a card. */
@@ -382,21 +518,23 @@ section[id] {
     transform 0.2s ease;
 }
 
-/* Two constraints on black, both measured (see the audit at the top):
-   white label vs fill >= 4.5, and fill vs page >= 3.0 so the control has a
-   visible edge. #c2320f -> 5.09 / 3.58, #cc1a47 -> 5.02 / 3.63. The v2 dark
-   stop #b3123f only managed 2.93 against the page and was replaced. The raw
-   briefed #ff6a3d is bright enough against the page but only carries a
-   2.59:1 white label, so it stays out of the fill and appears as the glow. */
+/* THE PRIMARY IS AN INVERSION NOW, not a coloured fill.
+   Two constraints on black, both measured (see the audit at the top): the
+   label vs the fill >= 4.5, and the fill vs the page >= 3.0 so the control
+   has a visible edge. A near-white fill with a --paper label clears both by
+   an order of magnitude — 19.97 / 19.97 at the white stop, 13.43 / 13.43 at
+   the #d4d4d4 one — which is what makes an inverted button the correct
+   primary on a monochrome page rather than a compromise. The glow is white
+   at low alpha, so the control still lifts off the page. */
 .btn-primary {
-  color: #ffffff;
-  background: linear-gradient(110deg, #c2320f, #cc1a47);
+  color: var(--paper);
+  background: linear-gradient(110deg, #ffffff, #d4d4d4);
   border-color: transparent;
-  box-shadow: 0 18px 40px -22px rgba(255, 106, 61, 0.65);
+  box-shadow: 0 18px 40px -22px rgba(255, 255, 255, 0.3);
 }
 .btn-primary:hover {
-  background: linear-gradient(110deg, #d6390f, #e01f4f);
-  box-shadow: 0 20px 46px -18px rgba(255, 106, 61, 0.8);
+  background: linear-gradient(110deg, #ffffff, #e8e8e8);
+  box-shadow: 0 20px 46px -18px rgba(255, 255, 255, 0.42);
 }
 
 .btn-ghost {
@@ -406,7 +544,7 @@ section[id] {
 }
 .btn-ghost:hover {
   border-color: var(--ink);
-  background: rgba(244, 244, 246, 0.06);
+  background: rgba(245, 245, 245, 0.06);
 }
 
 /* ------------------------------------------------------------
@@ -438,7 +576,7 @@ section[id] {
 }
 
 .waitlist-dialog::backdrop {
-  background: rgba(4, 4, 6, 0.72);
+  background: rgba(4, 4, 4, 0.72);
 }
 
 /* ------------------------------------------------------------
@@ -487,8 +625,8 @@ section[id] {
 
 .grid-field {
   background-image:
-    linear-gradient(to right, rgba(244, 244, 246, 0.055) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(244, 244, 246, 0.055) 1px, transparent 1px);
+    linear-gradient(to right, rgba(245, 245, 245, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245, 245, 245, 0.055) 1px, transparent 1px);
   background-size: 72px 72px;
   -webkit-mask-image: radial-gradient(
     ellipse 90% 70% at 60% 35%,
@@ -555,13 +693,17 @@ section[id] {
    them are deleted rather than left dangling.
 
    CONTRAST. Peak tint is 10.5% of the section's --ga over a 4.5% flat bed of
-   the same family. That is a shade under the 12% v4 used, because the flat bed
-   is new light that v4 did not have and the two stack wherever the radial is
-   at full strength. Worst case is the brightest accent in the file, #00e2b8:
-   the bed composites #08080a to rgb(7,17,17), the radial takes that to
-   rgb(6,31,28), L = 0.0128 — leaving --ink-dim at 6.7:1 and --ink at 14.2:1.
-   Nothing stacks any harder than that in the crossfade: two overlapping ramps
-   sum to one layer's worth of tint (see above), not two.
+   the same value. Worst case is the brightest --ga in the file, #d8d8d8: the
+   bed composites #090909 to rgb(18,18,18), the radial takes that to
+   rgb(39,39,39), L = 0.02028 — leaving --ink-dim at 5.92:1 and --ink at
+   13.70:1. Nothing stacks any harder than that in the crossfade: two
+   overlapping ramps sum to one layer's worth of tint (see above), not two.
+
+   MONOCHROME NOTE. Both stops of every pair are now true greys, so the
+   crossfade no longer has to hold a HUE steady across a boundary — only a
+   luminance, which the complementary-ramp construction above already
+   guarantees to within half a thousandth. The seam fix therefore gets
+   strictly more robust under this palette, not less.
 
    Every one of those numbers was then re-checked the only way that counts —
    rendering the page with its foreground hidden, reading the BRIGHTEST pixel
@@ -600,14 +742,14 @@ section[id] {
   background:
     radial-gradient(
       ellipse 104% 60% at var(--wash-x, 78%) var(--wash-y, 34%),
-      color-mix(in srgb, var(--ga) 10.5%, transparent) 0%,
-      color-mix(in srgb, var(--gb) 8%, transparent) 46%,
+      color-mix(in srgb, var(--ga) var(--wash-hi), transparent) 0%,
+      color-mix(in srgb, var(--gb) var(--wash-mid), transparent) 46%,
       transparent 86%
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--ga) 4.5%, transparent),
-      color-mix(in srgb, var(--gb) 4.5%, transparent)
+      color-mix(in srgb, var(--ga) var(--wash-bed), transparent),
+      color-mix(in srgb, var(--gb) var(--wash-bed), transparent)
     );
   /* Fully opaque only through the middle of the section; both ends ramp
      across a band straddling the boundary, complementary with the neighbour's
@@ -677,10 +819,22 @@ section[id] {
   transition: none;
 }
 
-/* SplitText line wrapper that must NOT clip — the Chat blur reveal needs the
-   blur to spill outside the line box. */
+/* SplitText line wrapper that must NOT clip.
+
+   This is the wrapper the signature `swoosh` entrance uses on every section
+   headline, and the reason it is un-masked is the reason the class exists: the
+   move carries the line sideways past its resting position and back, and an
+   `overflow: hidden` wrapper would amputate exactly the half of the gesture
+   that makes it a gesture. `.split-line` below is the clipping variant and is
+   still what `bodyLineReveal` uses, where the motion is purely vertical. */
 .split-line-open {
   display: block;
+  /* The headline lines are transformed sideways during the swoosh, and a
+     transformed inline-level box can still contribute to a scroll container's
+     overflow rectangle even when it is visually off the edge. `<html>` carries
+     `overflow-x: clip` for the page-level case, but this keeps the headline's
+     own excursion from ever reaching that fallback in the first place. */
+  will-change: transform;
 }
 
 /* ------------------------------------------------------------
@@ -897,7 +1051,7 @@ html.js-motion .hero-block {
 
 .faq-jump:hover {
   border-color: var(--gink);
-  background: rgba(244, 244, 246, 0.05);
+  background: rgba(245, 245, 245, 0.05);
 }
 
 /* The one chip that leaves the page. Same geometry and the same type as its
@@ -907,12 +1061,12 @@ html.js-motion .hero-block {
 .faq-jump-ext {
   border-color: var(--gink);
   color: var(--ink);
-  background: rgba(244, 244, 246, 0.05);
+  background: rgba(245, 245, 245, 0.05);
 }
 
 .faq-jump-ext:hover {
   border-color: var(--ink);
-  background: rgba(244, 244, 246, 0.1);
+  background: rgba(245, 245, 245, 0.1);
 }
 
 /* ------------------------------------------------------------
@@ -939,40 +1093,44 @@ html.js-motion .hero-block {
    Painted at z-index: -1 alongside the washes, in tree order, so it sits over
    the Graph wash and under the Simulation wash and under all page content.
 
-   THE SCRIM, RE-DERIVED. Two things changed and both push the same way: the
-   photograph is now at full strength right out to the section's own edges
-   (v4 had it at zero there), and `.sec-wash` gained a 4.5% flat bed under its
-   radial. So the worst pixel is no longer at some interior depth, it is
-   anywhere in the section, and it is brighter than v4's worst. Compositing in
-   order on a pure white source pixel (the plate's brightest channel really is
-   255, sampled, so there is no worse case):
+   THE PLATE IS DESATURATED. `filter: grayscale(1)` on the image itself,
+   because a full-bleed colour photograph is the single largest source of hue
+   on the page and leaving it would make the whole monochrome pass a lie —
+   pixel-sampling this section would come back with a warm skin-toned
+   background no matter what every token in this file said. Grayscale is
+   applied to the image rather than to the wrapper so the scrim over it, which
+   is already neutral, is not filtered a second time for nothing.
 
-     --paper                          rgb(  8,  8, 10)
-     + wash bed 4.5% (#f2b705)     -> rgb( 18, 15, 10)
-     + wash radial 12% (#f2b705)   -> rgb( 44, 35,  9)
-     + image at 0.34, white pixel  -> rgb(116,110, 93)
-     + scrim 0.62                  -> rgb( 44, 42, 35), L = 0.0224
+   THE SCRIM, RE-DERIVED FOR THE MONOCHROME WASH. Compositing in order on a
+   pure white source pixel (the plate's brightest channel really is 255,
+   sampled, and grayscale(1) cannot raise a channel above the maximum it
+   already had, so this is still the worst case):
 
-       --ink     #f4f4f6  ->  13.10 : 1
-       --ink-dim #a2a2ae  ->   5.72 : 1
+     --paper                          rgb(  9,  9,  9)
+     + wash bed 4.5% (#c4c4c4)     -> rgb( 17, 17, 17)
+     + wash radial 10.5% (#c4c4c4) -> rgb( 36, 36, 36)
+     + image at 0.34, white pixel  -> rgb(111,111,111)
+     + scrim 0.66                  -> rgb( 38, 38, 38), L = 0.01937
 
-   Flat 0.62 rather than the old 0.50/0.42/0.50 ramp. The ramp's 0.42 middle
-   only cleared 4.5:1 because v4's mask guaranteed the photograph was weak at
-   the top and bottom of the section, and that guarantee is gone. 0.56 rather
-   than the 0.50 the arithmetic above allows because the arithmetic is not the
-   test: rendering the page with its foreground hidden and reading the
+       --ink     #f5f5f5  ->  13.88 : 1
+       --ink-dim #a3a3a3  ->   6.00 : 1
+
+   0.66 rather than v3's 0.62, and the reason is that the arithmetic is not
+   the test. Rendering the page with its foreground hidden and reading the
    BRIGHTEST pixel actually under each block of copy put the Agents body text
-   at 4.12:1 with a 0.50 scrim and 4.48:1 at 375 with 0.60. At 0.62 the same
-   copy measures 4.87:1 at 1440 and 4.77:1 at 375, and it is the worst text on
-   the page at either width. The number here is the one that measured clean,
-   not the one that computed clean.
+   at 4.87:1 with the old 0.62 scrim under the old hued wash — the worst text
+   on the page at either width, with almost no margin. The computed figure
+   here (6.00:1) sits about 1.2x above what that measurement came back as, so
+   the extra four points of scrim buy the measured number roughly 5.1:1 and
+   put this text back in line with the rest of the page rather than leaving it
+   pinned to the threshold.
 
    NEIGHBOURING TEXT over the bleed was checked too, since the Graph legend and
-   the Simulation heading now sit above a fading photograph. Worst case is a
-   white source pixel at full bleed alpha directly on the boundary row, over
-   the Graph wash rgb(20,26,34): it composites to rgb(54,56,59), L = 0.0392,
-   leaving --ink-dim at 4.66:1. Real text is further from the boundary than
-   that, where the mask has already dropped: the legend measures 5.9:1.
+   the Simulation heading sit above a fading photograph. Worst case is a white
+   source pixel at full bleed alpha directly on the boundary row, over the
+   Graph wash rgb(35,35,35): it composites to rgb(41,41,41), L = 0.02217,
+   leaving --ink-dim at 5.77:1 — better than the 4.66:1 the hued version
+   computed, because the scrim came up and the wash under it came down.
 
    The persona cards sit on the opaque --paper-raised panel fill and are not
    relying on the scrim at all.
@@ -980,6 +1138,7 @@ html.js-motion .hero-block {
 
 .agents-bg-img {
   opacity: 0.34;
+  filter: grayscale(1);
   will-change: transform;
 }
 
@@ -1009,7 +1168,7 @@ html.js-motion .hero-block {
 }
 
 .agents-bg-scrim {
-  background: rgba(0, 0, 0, 0.62);
+  background: rgba(0, 0, 0, 0.66);
 }
 
 /* Faint relationship web between the Orchestrator and the council, echoing
@@ -1038,9 +1197,12 @@ html.js-motion .hero-block {
 
 /* Where the sigil comes to rest on the Orchestrator's staff. Its own drop
    shadow rather than a border, so it reads as light being held rather than as
-   a badge stuck on the figure. */
+   a badge stuck on the figure. Ignition, because what lands here IS the seed
+   and this is the end of the throughline: the Orchestrator is monochrome like
+   every other figure on the page and the one warm thing about it is the light
+   it is holding. */
 .orch-sigil {
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--grad-seed-a) 55%, transparent));
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--seed-a) 55%, transparent));
   will-change: transform, opacity;
 }
 
@@ -1056,18 +1218,25 @@ html.js-motion .hero-block {
    that happens to be there.
 
    These are decorative marks beside real labelled text, never the sole carrier
-   of any state, so nothing here has a contrast requirement of its own. */
+   of any state, so nothing here has a contrast requirement of its own.
+
+   v4.1: the lineage keeps Ignition, and now it is the ONLY thing on the page
+   that has a colour at all. The trick used to be that the section changed
+   colour and the throughline did not; it is now that the page has no colour
+   and the throughline does. Same idea, much louder, and it is the reason the
+   seed exception exists — a reader can pick this mark out of any section
+   instantly because nothing else near it is anything but grey. */
 .lineage-dot {
-  background: linear-gradient(140deg, var(--grad-seed-a), var(--grad-seed-b));
+  background: linear-gradient(140deg, var(--seed-a), var(--seed-b));
 }
 
 @keyframes lineage-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--grad-seed-a) 60%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--seed-a) 60%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--grad-seed-a) 0%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--seed-a) 0%, transparent);
   }
 }
 

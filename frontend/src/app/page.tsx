@@ -1,4 +1,3 @@
-import { WireframeSprite } from "@/components/WireframeFigures";
 import { HudRail } from "@/components/HudRail";
 import { ScrollRefresh } from "@/components/ScrollRefresh";
 import { Hero } from "@/components/Hero";
@@ -23,7 +22,6 @@ export default function Page() {
         Skip to content
       </a>
 
-      <WireframeSprite />
       <HudRail />
       <ScrollRefresh />
 

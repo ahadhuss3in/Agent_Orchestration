@@ -4,11 +4,10 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { gsap, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { assemble, bodyLineReveal, gesture, typeChars } from "@/lib/textAnim";
+import { bodyLineReveal, gesture, swoosh, typeChars } from "@/lib/textAnim";
 import { ARCHETYPES, ORCHESTRATOR } from "@/lib/content";
-import { FIGURES } from "@/lib/figures";
-import { InlineFigure } from "./WireframeFigures";
-import { SeedCore } from "./SeedCore";
+import { ARCHETYPE_TONE, PERSONA_CLUSTERS, isoCube } from "@/lib/cubes";
+import { CubeFigure, CubeMark, keystonePath } from "./CubeFigure";
 import { LINEAGE_ARRIVED } from "./GraphRelay";
 
 /**
@@ -18,6 +17,39 @@ import { LINEAGE_ARRIVED } from "./GraphRelay";
  * below and the note over `ARCHETYPES` in `content.ts`.
  */
 const COUNCIL = ARCHETYPES;
+
+/**
+ * The crown cube's projected centre, and every keystone's.
+ *
+ * Derived from `PERSONA_CLUSTERS` through the same `isoCube` projection
+ * `CubeFigure` draws with, so these are the real coordinates of the real
+ * shapes in the real viewBox rather than numbers eyeballed off a screenshot.
+ * They are what the idle loops and the summon flare scale about, and what the
+ * arriving seed is positioned on.
+ *
+ * `ISO_SCALE` and the viewBox are `CubeFigure`'s; they are restated as
+ * constants here rather than exported because the only thing outside that file
+ * that needs them is this arithmetic, and a second import would make it look
+ * like they were a shared contract when they are one component's private
+ * drawing scale.
+ */
+const ISO_SCALE = 16;
+const VIEW_MIN = -58;
+const VIEW_SPAN = 120;
+
+function keystoneCentre(id: (typeof COUNCIL)[number]["id"] | "orchestrator") {
+  const c = PERSONA_CLUSTERS[id];
+  const [x, y, z] = c.cells[c.key];
+  // The centre of a cube's top face is the cube's own projected origin.
+  const cube = isoCube(x, y, z, 0, 0.5, ISO_SCALE);
+  const [cx, cy] = cube.top.split(" ")[0].split(",").map(Number);
+  return [cx, cy] as const;
+}
+
+const [CROWN_X, CROWN_Y] = keystoneCentre("orchestrator");
+/** The same point as a percentage of the viewBox, for positioning the sigil. */
+const CROWN_LEFT = ((CROWN_X - VIEW_MIN) / VIEW_SPAN) * 100;
+const CROWN_TOP = ((CROWN_Y - VIEW_MIN) / VIEW_SPAN) * 100;
 
 /**
  * The Orchestrator splits to create the four personas, then they talk — and
@@ -44,23 +76,27 @@ const COUNCIL = ARCHETYPES;
  * plate is literally about wearing a face that is not your own. It drifts on
  * its own slow loop, independent of the intro's Ken-Burns, and parks itself
  * via IntersectionObserver whenever the section is off screen — the same
- * discipline `Orb` uses for its idle rotations. The scrim over it was sized
+ * discipline every ambient loop on this page uses. The scrim over it was sized
  * against the worst pixel the image can produce rather than eyeballed; the
  * arithmetic is in `globals.css` next to `.agents-bg-scrim`.
  *
- * MITOSIS. When the Orchestrator is fully in view, four shards fly out of its
- * body to the four card positions and become the personas. Each shard is a
- * real limb path lifted straight out of the Orchestrator's own geometry
- * (`FIGURES.orchestrator.strokes[limb]`), so what flies out is genuinely a
- * piece of the figure rather than a generic blob.
+ * MITOSIS. When the Orchestrator is fully in view, four shards fly out of it
+ * to the four card positions and become the personas. Each shard is a real
+ * cube off the Orchestrator's own crown (`keystonePath("orchestrator")`), so
+ * what flies out is genuinely a piece of the figure rather than a generic
+ * blob — the same idea the wireframe version had when the shard was a limb
+ * lifted out of the figure's strokes.
  *
  * MorphSVGPlugin is used for the shape change, and it was verified rather
  * than assumed: `node_modules/gsap/MorphSVGPlugin.js` is a real 38KB
  * implementation stamped "MorphSVGPlugin 3.15.0" that imports the actual path
  * utilities, not a club stub. Everything that used to be paywalled ships in
  * the free core package from GSAP 3.13 on, so the shard morphs from the
- * Orchestrator's arm into the destination persona's arm mid-flight, then
- * cross-dissolves into the full wireframe with a settle bounce.
+ * Orchestrator's cube into the exact outline of the keystone cube it is about
+ * to become in the destination cluster, then cross-dissolves into the full
+ * cluster with a settle bounce. Both shapes are six-point silhouettes out of
+ * the same isometric projection, which is about as clean a morph pair as
+ * MorphSVG will ever be handed.
  *
  * THE WEB. Four faint lines draw themselves from the Orchestrator down to each
  * persona once the mitosis lands, and stay. Same `pathLength={1}` +
@@ -69,12 +105,13 @@ const COUNCIL = ARCHETYPES;
  * and it puts something in the empty band between the hub card and the row.
  *
  * IDLE. After the split the section used to freeze. Now every figure holds a
- * slow loop on a sub-element — the Orchestrator's staff sways and the orb at
- * its head pulses, and each persona's head bobs while its joint dots shimmer
- * out of phase with its neighbours. That is why the four personas are drawn
- * with `InlineFigure` rather than the `<use>` sprite: a `<use>` shadow tree
- * has no elements script can reach, so there would be nothing to breathe.
- * All of it parks with the same IntersectionObserver as the background.
+ * slow loop on a sub-element — the Orchestrator's spire sways and the crown
+ * cube at the top of it pulses, and each persona's keystone cube swells while
+ * its pips shimmer out of phase with its neighbours. That is why `CubeFigure`
+ * emits every cube as a real `<g>` rather than instancing one shape through
+ * `<use>`: a `<use>` shadow tree has no elements script can reach, so there
+ * would be nothing to breathe. All of it parks with the same
+ * IntersectionObserver as the background.
  *
  * TALK BEAT. Each persona's card animates as it comes into focus: the figure
  * leans and bobs while its description types on character-by-character,
@@ -83,7 +120,8 @@ const COUNCIL = ARCHETYPES;
  * Everything above is gated behind `gsap.matchMedia()`. Under reduced motion
  * no shard is ever created (the layer is `display: none` in CSS), no loop is
  * built, the background image is present but still, the web is drawn at full
- * length by CSS, and the text is simply text.
+ * length by CSS, the cube clusters are the static SVG they always were, and
+ * the text is simply text.
  */
 export function AgentsSection() {
   const root = useRef<HTMLElement>(null);
@@ -127,14 +165,20 @@ export function AgentsSection() {
         const idlers = Array.from(
           s.querySelectorAll<HTMLElement>(".persona-idle"),
         );
-        // The staff is a real stroke in the Orchestrator's own geometry;
-        // `InlineFigure` stamps each stroke with its index so it can be
-        // addressed without hardcoding a magic number here.
-        const staffIdx = FIGURES.orchestrator.strokes.indexOf("M98 14 L98 196");
-        const staff = orch?.querySelector<SVGElement>(
-          `[data-stroke="${staffIdx}"]`,
-        );
-        const staffOrb = orch?.querySelector<SVGElement>(".orch-joint");
+        // THE SPIRE AND THE CROWN.
+        //
+        // The Orchestrator used to be a wireframe holding a staff, and the
+        // summon beat lifted the staff stroke and flared the orb at its top.
+        // It is a cube cluster now, and the equivalents are structural rather
+        // than drawn: `.orch-spire` is every cube on the cluster's vertical
+        // axis, `.orch-crown` is the single cube alone at the top of it, and
+        // `CubeFigure` derives both from the cluster's own geometry rather
+        // than from an index list here — so editing the shape cannot silently
+        // detach this beat from it.
+        const spire = orch
+          ? Array.from(orch.querySelectorAll<SVGElement>(".orch-spire"))
+          : [];
+        const crown = orch?.querySelector<SVGElement>(".orch-crown");
 
         /**
          * Point the relationship web at where the cards actually are.
@@ -181,7 +225,7 @@ export function AgentsSection() {
 
         const cleanups: (() => void)[] = [];
         cleanups.push(() => ro?.disconnect());
-        if (heading) cleanups.push(assemble(heading, s));
+        if (heading) cleanups.push(swoosh(heading, s));
         cleanups.push(bodyLineReveal(body, s));
 
         // ---------------- ambient loops ----------------
@@ -190,7 +234,7 @@ export function AgentsSection() {
         // is on screen; the figure loops wait for the mitosis to land, because
         // a persona that has not hatched yet has nothing to breathe with.
         // Nothing here ever runs for an off-screen viewport — same
-        // IntersectionObserver parking `Orb` uses for its own idle rotations.
+        // IntersectionObserver parking every other ambient loop here uses.
 
         // The section background. Its own slow loop, deliberately unrelated to
         // the intro's Ken-Burns: different amplitude, different period,
@@ -212,55 +256,61 @@ export function AgentsSection() {
 
         const idle: gsap.core.Tween[] = [];
 
-        // The Orchestrator breathes through its staff and the orb at its head
-        // — both real sub-elements of its geometry, reachable because it is
-        // rendered inline.
-        if (staff) {
+        // The Orchestrator breathes through its spire and its crown — both
+        // real sub-elements of its geometry, reachable because the cluster is
+        // emitted as real <g> elements rather than instanced through <use>.
+        //
+        // `svgOrigin: "0 0"` on both: `CubeFigure` projects into a viewBox
+        // centred on the origin, and the cluster's vertical axis passes
+        // through x = 0, so 0,0 IS the spire's own axis. That is why the sway
+        // reads as the whole column leaning rather than as a slide.
+        if (spire.length) {
           idle.push(
-            gsap.to(staff, {
+            gsap.to(spire, {
               rotation: 1.5,
               duration: 4.4,
               repeat: -1,
               yoyo: true,
               ease: "sine.inOut",
-              svgOrigin: "98 196",
+              svgOrigin: "0 0",
               paused: true,
             }),
           );
         }
-        if (staffOrb) {
+        if (crown) {
           idle.push(
-            gsap.to(staffOrb, {
-              scale: 1.22,
-              opacity: 0.7,
+            gsap.to(crown, {
+              scale: 1.16,
+              opacity: 0.72,
               duration: 2.8,
               repeat: -1,
               yoyo: true,
               ease: "sine.inOut",
-              svgOrigin: "98 12",
+              svgOrigin: `${CROWN_X} ${CROWN_Y}`,
               paused: true,
             }),
           );
         }
 
         figures.forEach((fig, i) => {
-          // First `.pf-stroke` is the head outline: `InlineFigure` emits the
-          // outline circles before the stroke paths.
-          const head = fig.querySelector<SVGElement>(".pf-stroke");
+          // The keystone cube is the one the shard flight landed as, so
+          // breathing it is the figure continuing the gesture it arrived on.
+          const key = fig.querySelector<SVGElement>(".pf-key");
           const joints = Array.from(fig.querySelectorAll<SVGElement>(".pf-joint"));
-          const o = FIGURES[COUNCIL[i]?.id ?? "strategist"].outlines[0];
+          const at = keystoneCentre(COUNCIL[i]?.id ?? "strategist");
 
-          // Scaled about its own centre rather than nudged on y, so the head
-          // swells and settles instead of detaching from the neck stroke.
-          if (head && o) {
+          // Scaled about the keystone's OWN projected centre, not the svg's
+          // origin: scaling about 0,0 would swing the cube across the cluster
+          // rather than swelling it in place.
+          if (key) {
             idle.push(
-              gsap.to(head, {
-                scale: 1.06,
+              gsap.to(key, {
+                scale: 1.09,
                 duration: 2.6 + i * 0.4,
                 repeat: -1,
                 yoyo: true,
                 ease: "sine.inOut",
-                svgOrigin: `${o.cx} ${o.cy}`,
+                svgOrigin: `${at[0]} ${at[1]}`,
                 delay: i * 0.35,
                 paused: true,
               }),
@@ -360,33 +410,33 @@ export function AgentsSection() {
             defaults: { ease: "power2.out" },
           });
 
-          // The staff arm lifts as the split begins: the Zeus figure doing
-          // the summoning rather than passively standing there.
-          if (staff) {
+          // The spire leans as the split begins: the figure doing the
+          // summoning rather than passively standing there.
+          if (spire.length) {
             tl.fromTo(
-              staff,
+              spire,
               { rotation: 0 },
               {
                 rotation: -6,
                 duration: 0.5,
                 yoyo: true,
                 repeat: 1,
-                svgOrigin: "98 196",
+                svgOrigin: "0 0",
                 ease: "power2.inOut",
               },
               0,
             );
           }
-          if (staffOrb) {
+          if (crown) {
             tl.fromTo(
-              staffOrb,
+              crown,
               { scale: 1 },
               {
-                scale: 2.1,
+                scale: 1.9,
                 duration: 0.45,
                 yoyo: true,
                 repeat: 1,
-                svgOrigin: "98 12",
+                svgOrigin: `${CROWN_X} ${CROWN_Y}`,
                 ease: "power2.out",
               },
               0.1,
@@ -442,14 +492,25 @@ export function AgentsSection() {
                 at,
               );
 
-            // The real shape morph, mid-flight.
+            // THE REAL SHAPE MORPH, MID-FLIGHT — and it still is one.
+            //
+            // v5 flew a limb path lifted out of the Orchestrator's wireframe
+            // and morphed it into the destination persona's matching limb.
+            // There are no limbs any more, but the idea survives intact and
+            // arguably reads better: what flies out is the outline of a cube
+            // off the Orchestrator's own crown, and it morphs into the exact
+            // outline of the keystone cube it is about to become in the
+            // destination cluster. Both are six-point silhouettes out of the
+            // same `isoCube` projection, which is about as clean a morph pair
+            // as MorphSVG will ever be handed.
             if (path) {
-              const targetD = FIGURES[COUNCIL[i].id].strokes[
-                FIGURES[COUNCIL[i].id].limb
-              ];
               tl.to(
                 path,
-                { morphSVG: targetD, duration: 0.8, ease: "power1.inOut" },
+                {
+                  morphSVG: keystonePath(COUNCIL[i].id),
+                  duration: 0.8,
+                  ease: "power1.inOut",
+                },
                 at + 0.1,
               );
             }
@@ -552,7 +613,10 @@ export function AgentsSection() {
     };
   }, []);
 
-  const limbD = FIGURES.orchestrator.strokes[FIGURES.orchestrator.limb];
+  // What flies out of the Orchestrator: the outline of the cube on its own
+  // crown. It morphs mid-flight into the keystone of whichever cluster it is
+  // heading for — see the note beside the morph in the timeline above.
+  const shardD = keystonePath("orchestrator");
 
   return (
     <section
@@ -623,7 +687,7 @@ export function AgentsSection() {
               archetype can go to a different entity on the next run, and the
               entity behind it still supplies what the agent knows and which
               edges it can reach. Everything you leave alone stays a node: still
-              in Neo4j, still queryable, just not talking.
+              in the graph, still there to be looked up, just not talking.
             </p>
           </div>
         </div>
@@ -661,22 +725,33 @@ export function AgentsSection() {
             {COUNCIL.map((p, i) => (
               <svg
                 key={p.id}
-                className="shard absolute left-0 top-0 h-[130px] w-[130px] text-[color:var(--ink-aurum)]"
-                viewBox="0 0 120 210"
+                className="shard absolute left-0 top-0 h-[150px] w-[150px]"
+                style={{ color: ARCHETYPE_TONE[p.id] }}
+                viewBox="-58 -58 120 120"
                 aria-hidden="true"
                 focusable="false"
                 role="presentation"
               >
+                {/* FILLED, not a bare stroke. The silhouette of a cube in
+                    isometric is a hexagon, so an unfilled outline in flight
+                    read as a floating wire hexagon rather than as a piece of
+                    the Orchestrator — which is the one thing it has to read
+                    as. A translucent fill in the destination archetype's own
+                    accent makes it a solid object travelling, and it arrives
+                    already the colour of the cluster it is about to become.
+                    The morph still animates this single `d`; the fill just
+                    follows the shape it is morphing into. */}
                 <path
                   className="shard-path"
-                  d={limbD}
-                  fill="none"
+                  d={shardD}
+                  fill="currentColor"
+                  fillOpacity="0.42"
                   stroke="currentColor"
-                  strokeWidth={i % 2 ? 3 : 2.5}
+                  strokeWidth={i % 2 ? 2.4 : 2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx="32" cy="54" r="3.4" fill="currentColor" />
+                <circle cx={CROWN_X} cy={CROWN_Y} r="3" fill="#ffffff" fillOpacity="0.85" />
               </svg>
             ))}
           </div>
@@ -685,48 +760,55 @@ export function AgentsSection() {
           <div className="reveal-target relative z-10 mt-16 flex justify-center lg:mt-20">
             <article className="agents-hub panel panel-glow panel-topline bracketed w-full max-w-[560px] p-7 sm:p-9">
               <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:items-start sm:text-left">
-                {/* Rendered inline rather than through the sprite so the staff
-                    arm is an addressable element the summon beat can lift.
-                    Aurum stays on the Zeus figure — the mythic thread. */}
+                {/* Aurum stays on the Orchestrator — the one figure that is
+                    a system role rather than a choice, and the one thread on
+                    the page that has always been gold. */}
                 <div className="orchestrator-figure relative shrink-0">
-                  <InlineFigure
+                  <CubeFigure
                     id="orchestrator"
-                    className="h-[190px] w-auto text-[color:var(--ink-aurum)] sm:h-[210px]"
-                    strokeClass="orch-stroke"
+                    tone="var(--ink-accent)"
+                    className="h-[190px] w-auto sm:h-[210px]"
+                    cubeClass="orch-stroke"
+                    keyClass="orch-key"
                     jointClass="orch-joint"
                   />
                   {/* WHERE THE SEED LANDS.
 
-                      The Orchestrator's geometry already has a joint at
-                      (98, 12) — the orb at the top of the staff — and this
-                      sits exactly on it: 98/120 across and 12/210 down the
-                      figure's own viewBox, so the two stay registered at
-                      every breakpoint without a magic pixel offset. Sizing it
-                      here rather than in the controller means `GraphRelay`
-                      never has to know how big the sigil should be; it reads
-                      this element's live rect and matches it.
+                      Dead centre of the crown cube's top face. `CROWN_LEFT`
+                      and `CROWN_TOP` are that point projected through the same
+                      `isoCube` call `CubeFigure` draws with and expressed as a
+                      percentage of the viewBox, so the mark and the cube stay
+                      registered at every breakpoint and would follow the crown
+                      automatically if the cluster were ever reshaped. No magic
+                      pixel offset, and nothing to re-eyeball.
+
+                      Sizing it here rather than in the controller means
+                      `GraphRelay` never has to know how big the arriving sigil
+                      should be; it reads this element's live rect and matches
+                      it.
 
                       Visible by default. `GraphRelay` hides it and crossfades
                       it in only on the branch where a flyer actually travels;
                       narrow and reduced-motion get it as a plain mark. */}
                   <span
                     aria-hidden="true"
-                    className="orch-sigil pointer-events-none absolute left-[81.6%] top-[5.7%] block w-[46px] -translate-x-1/2 -translate-y-1/2 sm:w-[50px]"
+                    className="orch-sigil pointer-events-none absolute block w-[40px] -translate-x-1/2 -translate-y-1/2 sm:w-[44px]"
+                    style={{ left: `${CROWN_LEFT}%`, top: `${CROWN_TOP}%` }}
                   >
-                    <SeedCore uid="orch" className="h-auto w-full" />
+                    <CubeMark uid="orch" className="h-auto w-full" />
                   </span>
                 </div>
                 <div>
                   {/* Was "ARCHETYPE / PRIMARY", which put the Orchestrator at
                       the top of the same menu as the four and read as a fifth
                       choice with seniority. It is not on the menu at all. */}
-                  <span className="hud-label text-[color:var(--ink-aurum)]">
+                  <span className="hud-label text-[color:var(--ink-accent)]">
                     SYSTEM ROLE / NOT ASSIGNABLE
                   </span>
                   <h3 className="display-sm mt-3 text-2xl text-ink sm:text-[1.7rem]">
                     {ORCHESTRATOR.name}
                   </h3>
-                  <p className="mt-1 font-mono text-[13px] text-[color:var(--ink-aurum)]">
+                  <p className="mt-1 font-mono text-[13px] text-[color:var(--ink-accent)]">
                     {ORCHESTRATOR.role}
                   </p>
                   <p className="mt-4 font-mono text-[13.5px] leading-relaxed text-ink-dim">
@@ -740,13 +822,13 @@ export function AgentsSection() {
           {/* ---- The archetype palette ----
 
               Presented as a menu you choose from, not a cast that already
-              exists. There is no backend behind this page, so nothing here
+              exists. No engine is running behind this page, so nothing here
               pretends to be a real control: the affordance is typographic —
               a palette header, a slot number on every card, and the word
               ASSIGN rather than PROMOTED — which says "these are the options"
               without implying a click that would go nowhere. */}
           <div className="reveal-target mt-16 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-t border-line pt-5">
-            <span className="hud-label text-[color:var(--ink-aurum)]">
+            <span className="hud-label text-[color:var(--ink-accent)]">
               ARCHETYPE PALETTE / 04 AVAILABLE
             </span>
             <p className="font-mono text-[12.5px] leading-relaxed text-ink-dim">
@@ -763,27 +845,38 @@ export function AgentsSection() {
               <li key={p.id} className="persona-card reveal-target">
                 <article className="panel panel-glow flex h-full flex-col p-6">
                   <div className="flex items-start justify-between gap-3">
-                    {/* `InlineFigure`, not the `<use>` sprite: the idle loop
-                        breathes the head circle and shimmers the joint dots,
-                        and neither is reachable inside a <use> shadow tree.
-                        The wrapper exists so the body sway and the talk beat's
-                        `gesture()` write to different nodes. */}
+                    {/* EACH ARCHETYPE IN ITS OWN ACCENT.
+
+                        v5 drew all four in Aurum, which was right when they
+                        were four wireframes of the same figure and the section
+                        was the only place they appeared. They are now cube
+                        clusters that a reader can also promote a graph node
+                        into two sections earlier, and the colour a promoted
+                        cube turns is this colour — so the card and the node
+                        have to agree, and `ARCHETYPE_TONE` is the one place
+                        that decides. Aurum is still on the Orchestrator above,
+                        which is not one of the four.
+
+                        Real <g> elements rather than a `<use>` instance: the
+                        idle loop breathes the keystone cube and shimmers the
+                        pips, and neither is reachable inside a <use> shadow
+                        tree. The wrapper exists so the body sway and the talk
+                        beat's `gesture()` write to different nodes. */}
                     <span className="persona-idle inline-block">
-                      <InlineFigure
+                      <CubeFigure
                         id={p.id}
-                        className="persona-figure h-[136px] w-auto text-[color:var(--ink-aurum)]"
-                        strokeClass="pf-stroke"
-                        jointClass="pf-joint"
+                        tone={ARCHETYPE_TONE[p.id]}
+                        className="persona-figure h-[136px] w-auto"
                       />
                     </span>
                     {/* Was "PROMOTED", which stated that this figure already
                         was an agent in some run. It is a slot on a menu. */}
-                    <span className="hud-label whitespace-nowrap text-[color:var(--ink-ignis)]">
+                    <span className="hud-label whitespace-nowrap text-[color:var(--ink-accent)]">
                       ASSIGN {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>
                   <h3 className="display-sm mt-5 text-lg text-ink">{p.name}</h3>
-                  <p className="mt-1 font-mono text-[12.5px] text-[color:var(--ink-aurum)]">
+                  <p className="mt-1 font-mono text-[12.5px] text-[color:var(--ink-accent)]">
                     {p.role}
                   </p>
                   <p className="persona-note mt-3 font-mono text-[13px] leading-relaxed text-ink-dim">

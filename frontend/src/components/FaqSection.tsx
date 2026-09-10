@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { bodyLineReveal } from "@/lib/textAnim";
+import { bodyLineReveal, swoosh } from "@/lib/textAnim";
 import { FAQS } from "@/lib/content";
 
 /**
@@ -68,7 +68,13 @@ export function FaqSection() {
         if (reduced) return;
 
         const body = Array.from(s.querySelectorAll<HTMLElement>(".faq-body"));
-        return bodyLineReveal(body, s);
+        const heading = s.querySelector<HTMLElement>(".faq-heading");
+        const revertBody = bodyLineReveal(body, s);
+        const revertHeading = heading ? swoosh(heading, s) : null;
+        return () => {
+          revertBody();
+          revertHeading?.();
+        };
       });
     };
 
@@ -170,7 +176,7 @@ export function FaqSection() {
             <span className="stage-rule reveal-target mb-8" aria-hidden="true" />
             <h2
               id="faq-heading"
-              className="reveal-target display-sm max-w-[15ch] text-[clamp(1.6rem,3.6vw,2.5rem)] text-ink"
+              className="faq-heading display-sm max-w-[15ch] text-[clamp(1.6rem,3.6vw,2.5rem)] text-ink"
             >
               The questions this page keeps getting.
             </h2>

@@ -47,12 +47,12 @@ export const PIPELINE = [
   {
     n: "03",
     name: "Extraction",
-    body: "One LLM call turns the text into typed entities, the relationships between them, and a qualitative briefing.",
+    body: "One pass over the seed turns the text into typed entities, the relationships between them, and a qualitative briefing.",
   },
   {
     n: "04",
     name: "Graph",
-    body: "Entities and relationships are written into Neo4j idempotently. Re-running a seed updates the graph, it never duplicates nodes.",
+    body: "Entities and relationships are written into the knowledge graph. Running the same seed again updates the graph in place instead of duplicating it.",
   },
   {
     n: "05",
@@ -62,7 +62,7 @@ export const PIPELINE = [
   {
     n: "06",
     name: "Simulation",
-    body: "The chosen agents run several rounds together, each with its own persona and scoped retrieval, reacting to earlier rounds.",
+    body: "The chosen agents run several rounds together, each with its own persona and its own slice of the graph to draw on, reacting to earlier rounds.",
   },
   {
     n: "07",
@@ -243,12 +243,12 @@ export const FAQS: {
 }[] = [
   {
     q: "If I typed a seed into this page, would it actually run?",
-    a: "No. This page is a presentation of the engine, not a deployment of it. Nothing on it is bound to a backend: the seed in the Seed section is a fixed example rather than a field, and the chat panel further down is a labelled mock-up whose composer is deliberately not a focusable input, because a real one with nothing behind it would imply a request that is never sent. The engine itself is a separate set of services, run independently of this page.",
+    a: "No. This page is a presentation of the engine, not a deployment of it. Nothing on it is wired to a running engine: the seed in the Seed section is a fixed example rather than a field, and the chat panel further down is a labelled mock-up whose composer is deliberately not a focusable input, because a real one with nothing behind it would imply a request that is never sent. The engine itself runs separately, independently of this page.",
     jump: { href: "#seed", label: "See the seed step" },
   },
   {
     q: "What happens to entities I don't promote into agents?",
-    a: "Nothing is thrown away. Extraction writes every person, organization and location it found into Neo4j whether or not you promote it. An un-promoted entity stays a node with all its relationships intact — still queryable, still available to whatever an agent retrieves — it just never speaks. Promotion decides who acts, not who exists.",
+    a: "Nothing is thrown away. Extraction writes every person, organization and location it found into the graph whether or not you promote it. An un-promoted entity stays a node with all its relationships intact — still there to be looked up, still available to whatever an agent reaches for — it just never speaks. Promotion decides who acts, not who exists.",
     jump: { href: "#graph", label: "Jump to the Graph" },
   },
   {
@@ -257,13 +257,13 @@ export const FAQS: {
     jump: { href: "#agents", label: "Jump to Agents" },
   },
   {
-    q: "How does a long run avoid blowing up the context window?",
-    a: "A rolling summary. Everything older than the current window is compressed into a single carried-forward brief, so an agent entering round forty is handed roughly the same amount of context as one entering round four. The window is bounded by design rather than by hoping runs stay short.",
+    q: "How does a long run avoid overloading the agents?",
+    a: "A rolling summary. Everything older than the last few rounds is compressed into a single carried-forward brief, so an agent entering round forty is handed roughly as much of the conversation to hold onto as one entering round four. How much each agent carries is bounded by design rather than by hoping runs stay short.",
     jump: { href: "#simulation", label: "Jump to Simulation" },
   },
   {
     q: "Does re-running the same seed duplicate the graph?",
-    a: "No. The Neo4j write is idempotent: re-running a seed updates the nodes and relationships already there rather than stacking a second copy of each beside the first. Extraction can be re-run against a seed as many times as you like without the graph drifting.",
+    a: "No. Running the same seed again updates the nodes and relationships already there rather than stacking a second copy of each beside the first. Extraction can be re-run against a seed as many times as you like without the graph drifting.",
     jump: { href: "#recap", label: "Read the pipeline" },
   },
   {

@@ -3,10 +3,10 @@
 import { useEffect, useRef } from "react";
 import { gsap, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { bodyLineReveal, countIn } from "@/lib/textAnim";
+import { bodyLineReveal, countIn, swoosh } from "@/lib/textAnim";
 import { PIPELINE } from "@/lib/content";
 import { spectrumAt } from "@/lib/spectrum";
-import { SeedCore } from "./SeedCore";
+import { CubeMark } from "./CubeFigure";
 
 /**
  * The accessible spine of the page.
@@ -21,9 +21,12 @@ import { SeedCore } from "./SeedCore";
  * their literal final text on cleanup, so a reverted context never leaves a
  * half-counted number on screen.
  *
- * Colour: this is the only place (with the footer) that uses the Spectrum
- * sweep, one slice of it per card, so the row reads as the whole pipeline
- * passing through every section's identity in order.
+ * Tone: this is the only place (with the footer) that uses the ramp in
+ * `lib/spectrum.ts`, one slice of it per card. It used to be four hues, one
+ * per section, so the row read as the page's colour legend passing by in
+ * order; it is now a grey ramp climbing toward white, so the row reads as the
+ * pipeline brightening as it runs to its end. Same device, and it says
+ * something truer about the seven steps than the legend did.
  */
 export function RecapSection() {
   const root = useRef<HTMLElement>(null);
@@ -54,6 +57,8 @@ export function RecapSection() {
         }));
 
         const cleanups: (() => void)[] = [];
+        const heading = s.querySelector<HTMLElement>(".recap-heading");
+        if (heading) cleanups.push(swoosh(heading, s));
         cleanups.push(bodyLineReveal(body, s));
         cleanups.push(countIn(steps.filter((x) => x.numeral), s));
         return () => cleanups.forEach((c) => c());
@@ -83,11 +88,10 @@ export function RecapSection() {
     >
       {/* The one section that never had a wash, which is why the run from
           Chat through Recap into the FAQ used to read colour, black, colour.
-          It picks up the same #ff6a3d -> #2f6bff pair its step cards already
-          use, which is also the pair the FAQ's own --ga continues from, so the
-          blue leaving the bottom of this section and the blue arriving at the
-          top of the FAQ are literally the same value — the one boundary on the
-          page whose crossfade has nothing to crossfade. */}
+          Its pair sits at the light end of the ramp, close to the top of the
+          step cards' own range, so the section and the row inside it read as
+          one tonal block rather than as a row of cards floating on unrelated
+          ground. */}
       <div
         aria-hidden="true"
         className="sec-wash"
@@ -105,7 +109,7 @@ export function RecapSection() {
 
             <h2
               id="recap-heading"
-              className="reveal-target display-sm max-w-[16ch] text-[clamp(1.6rem,3.6vw,2.5rem)] text-ink"
+              className="recap-heading display-sm max-w-[16ch] text-[clamp(1.6rem,3.6vw,2.5rem)] text-ink"
             >
               The whole pipeline, seed to conversation.
             </h2>
@@ -130,16 +134,19 @@ export function RecapSection() {
               >
                 <div className="flex items-baseline gap-3">
                   {/* THE LINEAGE, on the step it actually names. Step 01 is
-                      "Seed", and `spectrumAt(0)` is #ff6a3d, which is
-                      --grad-seed-a — so this card's own accent is already the
-                      sigil's colour and the mark costs nothing to reconcile.
-                      Only here: putting one on all seven would make it a
-                      bullet rather than a throughline. */}
+                      "Seed", so the mark belongs on this card and nowhere else
+                      in the row — putting one on all seven would make it a
+                      bullet rather than a throughline.
+
+                      It draws in its own light-to-mid grey ramp rather than in
+                      this card's `--ga`, which is the ramp's dimmest step. The
+                      lineage holds the top of the value scale wherever it
+                      appears; that is what has replaced it holding one hue
+                      wherever it appeared. */}
                   {i === 0 && (
-                    <SeedCore
+                    <CubeMark
                       uid="recap"
-                      ring={false}
-                      className="h-[15px] w-[15px] shrink-0 translate-y-[2px]"
+                      className="h-[16px] w-[16px] shrink-0 translate-y-[2px]"
                     />
                   )}
                   {/* The numeral is real text at 7.3:1 on the panel rather

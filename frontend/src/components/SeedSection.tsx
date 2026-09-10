@@ -1,5 +1,5 @@
 import { SEED_LINES } from "@/lib/content";
-import { Orb } from "./Orb";
+import { CubeSigil } from "./CubeSigil";
 
 /** The seed sentence shown in the input card. */
 const SEED_TEXT =
@@ -13,8 +13,9 @@ const SEED_TEXT =
  * single master ScrollTrigger, so all the motion moved up into
  * `SeedJourney`, which wraps both. That also means neither of these two
  * sections needs `'use client'` any more; the only client leaves left down
- * here are `<Orb>` (it owns its idle rotation) and the journey controller
- * itself.
+ * here is the journey controller itself — `<CubeSigil>` is pure markup with
+ * no script at all, which is what lets the seed be present and finished in the
+ * server HTML on every branch.
  *
  * The story lines are spaced a long way apart vertically at lg and up: that
  * vertical run is the runway the traveling seed sigil needs in order to
@@ -76,20 +77,20 @@ export function SeedSection() {
         <div className="seed-card-wrap mt-12 max-w-[680px]">
           <div className="seed-card-move">
             <article className="panel panel-glow bracketed reveal-target p-6 sm:p-8">
-            <span className="hud-label text-[color:var(--ink-ignis)]">
+            <span className="hud-label text-[color:var(--ink-accent)]">
               SEED / INPUT
             </span>
             <p className="display-sm mt-4 text-[clamp(1.15rem,2.6vw,1.6rem)] text-ink">
               {SEED_TEXT}
             </p>
             <p className="mt-6 font-mono text-[12px] text-ink-dim">
-              <span className="text-[color:var(--ink-ignis)]">mode</span>{" "}
+              <span className="text-[color:var(--ink-accent)]">mode</span>{" "}
               fictional
               <span
                 aria-hidden="true"
                 className="mx-3 inline-block h-3 w-px translate-y-[2px] bg-[color:var(--line-strong)]"
               />
-              <span className="text-[color:var(--ink-ignis)]">
+              <span className="text-[color:var(--ink-accent)]">
                 context fetch
               </span>{" "}
               skipped
@@ -97,7 +98,7 @@ export function SeedSection() {
                 aria-hidden="true"
                 className="mx-3 inline-block h-3 w-px translate-y-[2px] bg-[color:var(--line-strong)]"
               />
-              <span className="text-[color:var(--ink-ignis)]">next</span>{" "}
+              <span className="text-[color:var(--ink-accent)]">next</span>{" "}
               extraction
             </p>
             </article>
@@ -135,16 +136,26 @@ export function SeedSection() {
           */}
           <div
             aria-hidden="true"
-            className="seed-inline-orb pointer-events-none sticky top-[40vh] hidden h-0 justify-center self-start lg:flex"
+            /* `items-start`, and it is load-bearing. This box is deliberately
+               `h-0` so the sticky sigil takes no space in the grid row and the
+               story lines keep the full column width. But a flex container
+               defaults to `align-items: stretch`, which stretched the sigil to
+               the container's own height — zero — so the seed was measurably
+               present, positioned correctly, and 0px tall on exactly the two
+               branches that have no other seed to show: reduced motion, and a
+               wide viewport with no WebGL. Measured at 1440 under reduced
+               motion: rect 551x0, svg 330x0. `items-start` lets the child keep
+               the intrinsic height its viewBox aspect gives it. */
+            className="seed-inline-orb pointer-events-none sticky top-[40vh] hidden h-0 items-start justify-center self-start lg:flex"
           >
-            <Orb uid="seed-inline" className="h-auto w-[min(26vw,300px)]" />
+            <CubeSigil uid="seed-inline" className="h-auto w-[min(28vw,330px)]" />
           </div>
 
           <div
             aria-hidden="true"
             className="seed-inline-orb-sm pointer-events-none absolute inset-x-0 top-1/2 -z-10 flex -translate-y-1/2 justify-center opacity-25 lg:hidden"
           >
-            <Orb uid="seed-inline-sm" className="h-auto w-[min(70vw,320px)]" />
+            <CubeSigil uid="seed-inline-sm" className="h-auto w-[min(74vw,340px)]" />
           </div>
         </div>
       </div>

@@ -3,10 +3,11 @@
 import { useEffect, useRef } from "react";
 import { gsap, JOURNEY_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { bodyLineReveal, maskWipe } from "@/lib/textAnim";
+import { bodyLineReveal, swoosh } from "@/lib/textAnim";
 import { useInViewClass } from "@/lib/useInViewClass";
-import { GRAPH_NODES } from "@/lib/content";
-import { Orb } from "./Orb";
+import { stage, resetStage } from "@/lib/stage3d";
+import { CubeSigil } from "./CubeSigil";
+import { CubeStage } from "./cube/CubeStage";
 import { SeedSection } from "./SeedSection";
 import { GraphSection } from "./GraphSection";
 
@@ -73,6 +74,25 @@ const smoothstep = (t: number) => t * t * (3 - 2 * t);
 type SwallowTarget = {
   measure: HTMLElement;
   move: HTMLElement;
+  /**
+   * WHICH CUBE THIS FLIES INTO.
+   *
+   * The change the client asked for: a line must not be pulled into "the
+   * cluster", it must visibly go into ONE cube and merge with it, so that by
+   * the time the formation comes apart the reader already knows which cube is
+   * which entity. `-1` means the cluster's centre and is what the section
+   * heading and the seed card use — they are not entities, they are the
+   * section's furniture being cleared out of the way.
+   *
+   * A slot index aims at `stage.cubeScreen[slot]`, which the WebGL scene
+   * rewrites every frame by projecting that cube's live world position back to
+   * viewport pixels. So the aim tracks the cube through the cluster's rotation
+   * and descent rather than assuming where it will be. If no scene is
+   * mounted — no WebGL, or the SVG-sigil fallback branch — `cubeScreen` is
+   * never written, `stage.live` stays false, and every target falls back to
+   * the cluster centre, which is exactly what v5 did.
+   */
+  aim: number;
   /** Last amount actually written, so identical frames are skipped. */
   amount: number;
   /**
@@ -86,44 +106,52 @@ type SwallowTarget = {
 };
 
 /**
- * Client feedback #5 — the seed follows you down the page, eats the story
- * lines, then centres and becomes the graph.
+ * The seed follows you down the page, eats the story lines one cube at a
+ * time, then comes apart into the graph.
  *
  * This component owns both sections so one master ScrollTrigger can span
- * them. `SeedSection` and `GraphSection` are now pure server markup; every
+ * them. `SeedSection` and `GraphSection` are pure server markup; every
  * timeline that touches either of them lives here.
  *
- * How it works on wide viewports with motion allowed:
+ * WHAT IS ACTUALLY ON SCREEN depends on the branch, and every branch is a
+ * finished page rather than a degraded one:
+ *
+ *   wide + motion + WebGL   a real 3D formation of 34 cubes on a sticky
+ *                           canvas (`CubeStage` -> `CubeScene`). This is the
+ *                           full version: text merges into individual cubes,
+ *                           the cluster disperses into the graph, and the
+ *                           nodes stay draggable and promotable afterwards.
+ *   wide + motion, no WebGL the same journey with the flat isometric
+ *                           `CubeSigil` as the traveller. Same descent, same
+ *                           swallow, same handoff — drawn in SVG.
+ *   narrow / reduced motion no travel at all. The inline sigil and the
+ *                           finished graph still are simply present, which is
+ *                           what the server markup already renders.
+ *
+ * How the wide, motion-allowed run works — and note that NONE of this changed
+ * when the seed became 3D, because the controller never knew what it was
+ * moving in the first place:
  *
  *   1. A single scrubbed tween runs a `driver` object from 0 to 1 across the
- *      whole run, from the top of the Seed section to the moment the graph
- *      constellation is centred. Its onUpdate is the only thing that ever
- *      positions the fixed sigil.
+ *      whole run, from the top of the Seed section to the moment the graph is
+ *      centred. Its onUpdate is the only thing that ever positions anything.
  *   2. `place()` maps that one progress value to a viewport coordinate: the
- *      sigil swings in from off-screen right, then descends from 26vh to
- *      70vh while drifting slightly inward, so it visibly travels down the
- *      page in step with the scrollbar.
+ *      seed swings in from off-screen right, then descends from 28vh to 56vh
+ *      while drifting inward, so it visibly travels down the page in step
+ *      with the scrollbar. That coordinate is published to `stage.frame`,
+ *      which the 3D scene reads and converts to world units.
  *   3. THE SWALLOW. Inside that same onUpdate, every target that is not
- *      already fully eaten is measured against the sigil's live centre and
- *      given a continuous 0->1 amount, which is written straight to its
- *      transform. Targets are the section heading, the seed input card, and
- *      every story line. See `applySwallow` for why this replaced the
- *      per-line trigger it used to be.
- *   4. Past 84% the same driver lerps the sigil onto the graph's central
- *      node — measured live, which on this layout is the horizontal centre
- *      of the viewport — matching its scale as it goes.
- *   5. Past 94% the flyer fades out while the graph's inline orb fades in at
- *      the same coordinate and the same size, so it reads as one continuous
- *      object. The node stagger and edge draw then play out as before.
- *
- * Narrow viewports (< 1024px): the fixed-follow mechanic is switched off
- * entirely. There is no room beside the copy for a sigil to travel through
- * at 375px, and a fixed element crossing the text would sit on top of the
- * words rather than beside them. The inline sigil stays in document flow and
- * the lines just fade up.
- *
- * Reduced motion: no travel, no consuming, no drawing. Inline sigil, lines
- * visible, nodes and edges at their final state.
+ *      already fully eaten is measured against the seed's live line and given
+ *      a continuous 0->1 amount, written straight to its transform. What
+ *      CHANGED is where each target is pulled TO: a story line is aimed at
+ *      its own cube's live projected position, so it merges with one specific
+ *      cube rather than with the mass. See `aim` on `SwallowTarget`.
+ *   4. From 70% the cluster's `spread` runs to 1 and every cube lerps out of
+ *      the formation into its own position in the graph layout, with edges
+ *      drawn between them. Past 84% the whole group converges on the graph
+ *      visual's centre, measured live.
+ *   5. Past 94% the flat fallbacks fade out. On the WebGL branch they were
+ *      never visible: `stage.live` holds them at zero from the first frame.
  */
 export function SeedJourney() {
   const root = useRef<HTMLDivElement>(null);
@@ -153,13 +181,13 @@ export function SeedJourney() {
         const seedEl = q<HTMLElement>("#seed");
         const graphVisual = q<HTMLElement>(".graph-visual");
         const graphOrb = q<HTMLElement>(".graph-center-orb");
+        const graphStill = q<HTMLElement>(".graph-still");
+        const graphOrbArt = q<HTMLElement>(".graph-orb-art");
         const flyer = q<HTMLElement>(".seed-flyer");
         const flyerInner = q<HTMLElement>(".seed-flyer-inner");
         const inlineOrb = q<HTMLElement>(".seed-inline-orb");
         const lines = qa<HTMLElement>(".seed-line");
         const lineTexts = qa<HTMLElement>(".seed-line-text");
-        const nodes = qa<SVGGElement>(".gnode");
-        const edges = qa<SVGLineElement>(".edge-path");
         const seedHeading = q<HTMLElement>(".seed-heading");
         const graphHeading = q<HTMLElement>(".graph-heading");
         const seedBody = qa<HTMLElement>(".seed-body");
@@ -169,15 +197,22 @@ export function SeedJourney() {
 
         const cleanups: (() => void)[] = [];
 
+        resetStage();
+
         // ---------------- reduced motion ----------------
+        //
+        // The graph still, the seed sigil and the lines are all already at
+        // their finished state in the server markup — there is nothing here to
+        // reveal, only things to make sure nothing else hid. No WebGL scene is
+        // mounted on this branch at all: `CubeStage` checks the same media
+        // query and returns null, so the dynamic import never even fires.
         if (reduced) {
-          gsap.set([lines, lineTexts, nodes, graphOrb], {
+          gsap.set([lines, lineTexts, graphOrb], {
             opacity: 1,
             scale: 1,
             x: 0,
             y: 0,
           });
-          gsap.set(edges, { strokeDashoffset: 0, opacity: 1 });
           if (inlineOrb) gsap.set(inlineOrb, { opacity: 1 });
           baseReveal(s, true);
           return;
@@ -185,53 +220,17 @@ export function SeedJourney() {
 
         baseReveal(s, false);
 
-        // Per-section headline treatments (feedback #4). Graph gets the
-        // line-by-line mask wipe; the Seed heading keeps a body-style line
-        // reveal because the section's real set piece is the sigil itself.
-        if (seedHeading) cleanups.push(maskWipe(seedHeading, seedEl));
-        if (graphHeading) cleanups.push(maskWipe(graphHeading, graphVisual));
+        // Both headlines take the page's signature entrance (feedback #3).
+        if (seedHeading) cleanups.push(swoosh(seedHeading, seedEl));
+        if (graphHeading) cleanups.push(swoosh(graphHeading, graphVisual));
         cleanups.push(bodyLineReveal(seedBody, seedEl));
         cleanups.push(bodyLineReveal(graphBody, graphVisual));
 
-        // ---------------- graph nodes + edges ----------------
-        // Deliberately starts after the handoff has finished ("center 45%"
-        // is reached after "center center"), so the seed has already become
-        // the central node by the time the constellation grows out of it.
-        // Scale each node around its own coordinate rather than the group
-        // bbox, which would include the label underneath and pull the origin
-        // off-centre.
-        //
-        // `svgOrigin`, not `transformOrigin`. A px `transformOrigin` on an
-        // SVG <g> is resolved against that element's own box, so GSAP
-        // compensates with a large translate — which parked the shrunken
-        // nodes ~370px outside the SVG and showed up as real horizontal
-        // overflow in the 1440 check. `svgOrigin` takes the coordinate in
-        // SVG user space, which is what these numbers actually are.
-        gsap.set(nodes, {
-          opacity: 0,
-          scale: 0.2,
-          svgOrigin: (i: number) =>
-            `${GRAPH_NODES[i]?.x ?? 0} ${GRAPH_NODES[i]?.y ?? 0}`,
-        });
-        gsap.set(edges, { strokeDashoffset: 1, opacity: 0 });
-
-        const graphTl = gsap.timeline({
-          scrollTrigger: { trigger: graphVisual, start: "center 45%", once: true },
-        });
-        graphTl
-          .to(nodes, {
-            opacity: 1,
-            scale: 1,
-            duration: 0.65,
-            ease: "back.out(2)",
-            stagger: { each: 0.07, from: "center" },
-          })
-          .to(edges, { opacity: 1, duration: 0.01 }, "-=0.35")
-          .to(
-            edges,
-            { strokeDashoffset: 0, duration: 0.9, ease: "power2.inOut", stagger: 0.07 },
-            "<",
-          );
+        // NO CONSTELLATION TIMELINE ANY MORE. v5 staggered eight SVG nodes in
+        // and drew their edges on a one-shot trigger here. The nodes are cubes
+        // now and they arrive by coming apart from the formation, which is a
+        // continuous function of the same scrub that carries the seed down the
+        // page — see `spread` in `place()`. There is nothing left to stagger.
 
         // ---------------- narrow: no travel ----------------
         if (!wide) {
@@ -299,15 +298,31 @@ export function SeedJourney() {
         const addTarget = (
           measureEl: HTMLElement | null,
           moveEl: HTMLElement | null,
+          aim: number,
         ) => {
           if (measureEl && moveEl) {
-            swallow.push({ measure: measureEl, move: moveEl, amount: -1, lockedAt: null });
+            swallow.push({
+              measure: measureEl,
+              move: moveEl,
+              aim,
+              amount: -1,
+              lockedAt: null,
+            });
           }
         };
-        addTarget(q<HTMLElement>(".seed-heading-wrap"), q<HTMLElement>(".seed-heading"));
-        addTarget(q<HTMLElement>(".seed-card-wrap"), q<HTMLElement>(".seed-card-move"));
-        lines.forEach((line) =>
-          addTarget(line, line.querySelector<HTMLElement>(".seed-line-move")),
+        addTarget(
+          q<HTMLElement>(".seed-heading-wrap"),
+          q<HTMLElement>(".seed-heading"),
+          -1,
+        );
+        addTarget(
+          q<HTMLElement>(".seed-card-wrap"),
+          q<HTMLElement>(".seed-card-move"),
+          -1,
+        );
+        // Story line n goes into story cube n. One line, one cube, in order.
+        lines.forEach((line, i) =>
+          addTarget(line, line.querySelector<HTMLElement>(".seed-line-move"), i),
         );
 
         /** Reads for one frame, produced before anything is written. */
@@ -364,11 +379,34 @@ export function SeedJourney() {
           const pending: Pending[] = [];
           let peak = 0;
 
+          /**
+           * Where a given target is being pulled TO, this frame.
+           *
+           * The one real change to this mechanic since v5. Everything about
+           * the window — `HOLD_VH`, `SWALLOW_VH`, the signed distance, the
+           * smoothstep, the reversal — is untouched, because it was measured
+           * and it works. What changed is that the destination is no longer
+           * unconditionally "wherever the sigil is": an entity line is aimed
+           * at its own cube's live projected position, so it merges with that
+           * specific cube rather than at the middle of the mass.
+           */
+          const aimAt = (slot: number): [number, number] => {
+            if (slot >= 0 && stage.live) {
+              const c = stage.cubeScreen[slot];
+              // A cube behind the camera or not yet projected reads as (0, 0);
+              // aiming at the corner of the viewport would fling the line off
+              // the page, so fall through to the cluster centre.
+              if (c && (c[0] !== 0 || c[1] !== 0)) return c;
+            }
+            return [x, y];
+          };
+
           for (const t of swallow) {
             // Settled inside the sigil and the scroll has not come back for
             // it: no rect read, no write.
             if (t.lockedAt !== null && p >= t.lockedAt) continue;
 
+            const [ax, ay] = aimAt(t.aim);
             const r = t.measure.getBoundingClientRect();
             const tx = r.left + r.width / 2;
             const ty = r.top + r.height / 2;
@@ -386,10 +424,19 @@ export function SeedJourney() {
             // on the approach and the swallow happens as the sigil draws
             // level and passes — which is the order a reader expects, and the
             // reason the copy is legible for a real beat first.
+            // The TRIGGER stays the cluster's own line (`y`), even for a
+            // target aimed at a cube. Deliberate, and it is what keeps the
+            // reading window honest: `HOLD_VH` and `SWALLOW_VH` were measured
+            // against the cluster's descent from 28vh to 56vh, and letting a
+            // cube that happens to be riding high in the formation start the
+            // pull early would eat that line while it was still mid-screen —
+            // the exact "the text disappears before I can read it" complaint
+            // this window was built to fix. When the line does go, it goes to
+            // the cube.
             const d = ty - y;
             const a = smoothstep(clamp01((hold - d) / span));
 
-            pending.push({ t, a, dx: x - tx, dy: y - ty });
+            pending.push({ t, a, dx: ax - tx, dy: ay - ty });
             // Peaks at a = 0.5, so the sigil pulses hardest mid-gulp and is
             // back at rest whether the target is untouched or fully absorbed.
             peak = Math.max(peak, 4 * a * (1 - a));
@@ -399,7 +446,69 @@ export function SeedJourney() {
           const fadeT = clamp01((p - 0.94) / 0.06);
           const visible = entry > 0.02 ? 1 : 0;
 
-          gsap.set(flyer, { x, y, scale, opacity: visible * (1 - fadeT) });
+          /**
+           * DISPERSAL. 0 is the clustered formation, 1 is the graph layout.
+           *
+           * It starts at 0.70, before the convergence on the graph's centre
+           * begins at 0.84, so the cubes are already visibly coming apart as
+           * they arrive rather than arriving intact and then exploding. It is
+           * finished at 0.98, which is inside the window where the reader has
+           * stopped scrolling the journey and the graph is the thing on
+           * screen — dragging must never begin while the layout is still
+           * moving under the cursor.
+           */
+          const spread = smoothstep(clamp01((p - 0.7) / 0.28));
+
+          // THE STAGE IS THE ONLY THING THE SCENE READS. One write per frame,
+          // no React state, no event. See `lib/stage3d.ts`.
+          const f = stage.frame;
+          f.x = x;
+          f.y = y;
+          f.p = p;
+          f.spread = spread;
+          f.pulse = peak;
+          // The 3D group does its own cluster -> graph scaling from `spread`,
+          // so the flyer-vs-orb size match below is the DOM path's business
+          // only and must not be applied twice.
+          f.scale = 1;
+          for (const { t, a } of pending) {
+            if (t.aim >= 0) f.eaten[t.aim] = a;
+          }
+
+          // THE DOM SIGIL IS THE FALLBACK, NOT THE MAIN EVENT.
+          //
+          // On the branch where a WebGL scene is mounted the cluster on the
+          // canvas IS the seed, and this element would be a second copy of it
+          // sitting on the same pixels — the same doubling bug `GraphRelay`
+          // documents at its own handover. So it is held at zero the whole
+          // time a scene is live. On a wide, motion-allowed viewport with no
+          // WebGL, `stage.live` never becomes true, this element travels the
+          // identical path with the identical swallow, and the section is
+          // still the set piece it was in v5 — just drawn flat.
+          gsap.set(flyer, {
+            x,
+            y,
+            scale,
+            opacity: stage.live ? 0 : visible * (1 - fadeT),
+          });
+          // Likewise the still of the finished graph: it is the default state
+          // of the markup, and it steps aside only when something live is
+          // actually drawing over it.
+          //
+          // `fadeT < 1` for the same reason the graph orb below carries the
+          // same guard, and it is now load-bearing rather than merely tidy:
+          // once this leg has handed over, `GraphRelay` owns this element and
+          // shrinks it away as part of the graph's departure. Re-asserting
+          // opacity 1 on every settling frame of the overlap would fight that
+          // and leave the flat graph flickering back to full while it was
+          // supposed to be receding. Scrolling back up drops fadeT below 1 and
+          // control returns here.
+          if (graphStill && fadeT < 1) {
+            gsap.set(graphStill, { opacity: stage.live ? 0 : 1 });
+          }
+          if (graphOrbArt) {
+            gsap.set(graphOrbArt, { opacity: stage.live ? 0 : 1 });
+          }
           // `< 1` rather than unconditional. Once this leg has fully handed
           // over, the graph orb belongs to `GraphRelay`, whose own driver
           // starts at exactly the scroll position this one ends at — and which
@@ -488,7 +597,7 @@ export function SeedJourney() {
         return () => {
           travel.kill();
           lineTweens.forEach((t) => t.kill());
-          graphTl.kill();
+          resetStage();
           // `gsap.set` calls made inside onUpdate run long after the
           // matchMedia context finished recording, so the context cannot
           // revert them. Cleared by hand.
@@ -516,23 +625,89 @@ export function SeedJourney() {
   return (
     <div ref={root} className="relative">
       {/*
-        The traveling sigil. `position: fixed` so it can hold a viewport
-        coordinate while the document scrolls underneath — a different device
-        from the pinned sections elsewhere on the page, and one that does not
-        consume any pin budget because it never pins the scroll itself.
-        Desktop + motion only; created hidden and revealed by the timeline.
+        THE LIVE SEED. Mounts a WebGL scene only where one is warranted — see
+        the eligibility list in `CubeStage`. On every other branch this renders
+        nothing at all and the flat sigils below carry the section.
+      */}
+      <CubeStage />
+
+      {/*
+        THE FLAT TRAVELLING SIGIL — the wide, motion-allowed, NO-WEBGL path.
+
+        Same fixed-position mechanic and same swallow it has had since v5, now
+        drawing the cube formation instead of the astrolabe. `place()` holds it
+        at opacity 0 for as long as a real scene is live, so the two are never
+        both on screen. It does not consume any pin budget because it never
+        pins the scroll itself.
       */}
       <div
         aria-hidden="true"
-        className="seed-flyer pointer-events-none fixed left-0 top-0 z-30 hidden w-[190px] will-change-transform lg:block"
+        className="seed-flyer pointer-events-none fixed left-0 top-0 z-30 hidden w-[230px] will-change-transform lg:block"
       >
         <div className="seed-flyer-inner">
-          <Orb uid="travel" className="h-auto w-full" />
+          <CubeSigil uid="travel" className="h-auto w-full" />
         </div>
       </div>
 
       <SeedSection />
       <GraphSection />
+
+      {/*
+        THE DWELL ZONE, and it is not padding.
+
+        Two jobs, and the second one is a real bug fix.
+
+        First, it is where the reader actually uses the graph. The journey's
+        scrub ends with the constellation centred in the viewport; without
+        somewhere to stand after that, the graph settles and is immediately
+        scrolled away, which would make the drag-and-promote interaction the
+        client asked for something you have to fight the page to reach. This is
+        the beat where nothing new arrives and the thing in front of you is
+        yours to move.
+
+        Second, the sticky canvas needs runway. `CubeStage`'s stage is a
+        `sticky` box inside a column that is exactly as tall as this wrapper,
+        and a sticky element STOPS sticking when its container's bottom edge
+        reaches the bottom of the viewport. Measured at 1440x900 without this
+        spacer, the container's bottom landed about ten pixels past the
+        viewport bottom at the exact scroll position the journey finishes at —
+        so the graph unstuck on the final frame and visibly slid up off the top
+        of the screen, which is what the first pass actually did.
+
+        80vh -> 52vh, AND THE REASON IS MEASURED. Client: "if anyone scrolls
+        the graph just sticks in middle", and after a first cut at this, "the
+        graph is still stuck for few scrolls when scrolling down after it forms
+        the graph". At 80vh the graph was genuinely held, unchanging, for 746px
+        at 1440x900 — 0.83 of a viewport in which scrolling did nothing visible
+        — and then slid away over another full viewport at unchanged size,
+        which is the separate bug `GraphRelay` now fixes. Two problems, and
+        this spacer was half of the first one.
+
+        52vh leaves 494px of hold at 1440x900, and only the first ~180px of
+        that is truly inert: `GraphRelay` opens the departure about two wheel
+        notches after the graph settles, so past that point every further
+        scroll visibly moves something. That is the number that matters — not
+        the spacer length but how long scrolling produces no change at all —
+        and it is down from 746px to under 180.
+
+        The floor is not arbitrary. The spacer has to stay longer than the
+        distance between the journey's finish and the sticky release, or the
+        graph unsticks before it has settled, which is the bug this element was
+        originally added to fix; and it has to leave `GraphRelay` room to
+        complete the recede before that release. At 1440x900 those put the
+        floor around 30vh, so 52vh keeps real margin at every viewport height.
+
+        The other half of "sticks in middle" was that nothing ever SAID the
+        pause was for something. That is fixed in `CubeStage` with a hint at
+        the graph itself, not here.
+
+        ZERO BELOW 1024, and that is not a detail. `CubeStage` does not mount
+        at all under that width, so there is no sticky box needing runway and
+        nothing to dwell on — the spacer would be 52vh of empty black between
+        the graph legend and the Agents section, which is what the first pass
+        shipped and which reads as a broken page on a phone.
+      */}
+      <div aria-hidden="true" className="h-0 lg:h-[52vh]" />
     </div>
   );
 }

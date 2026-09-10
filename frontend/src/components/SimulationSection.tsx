@@ -3,26 +3,40 @@
 import { useEffect, useRef } from "react";
 import { gsap, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { bodyLineReveal, typeOn } from "@/lib/textAnim";
+import { bodyLineReveal, swoosh } from "@/lib/textAnim";
 import { useInViewClass } from "@/lib/useInViewClass";
 import { SIM_LINES } from "@/lib/content";
-import { Figure } from "./WireframeFigures";
+import { ARCHETYPE_TONE } from "@/lib/cubes";
+import { CubeFigure } from "./CubeFigure";
 
 /**
- * Cool turns take the Signal blue, warm turns the Pulse green. Both are the
- * lightened-for-black ink variants (10.5:1 and 11.0:1 on the page, 9.7:1 and
- * 10.2:1 on a panel), and neither is anywhere near the banned violet band.
+ * WHAT REPLACED THE COOL/WARM SPLIT.
+ *
+ * Turns used to alternate between Signal blue and Pulse green — figure tone,
+ * speaker label and row border all three. On a monochrome page that split has
+ * nothing to say, and it is worth being honest that it never had much: warm
+ * and cool did not correspond to anything about the speakers, it was texture.
+ *
+ * Two real signals take over, and both were already present:
+ *
+ *   WHO IS SPEAKING   the row's `CubeFigure` is that archetype's own authored
+ *                     cluster — a climbing stair, an off-true block, a closed
+ *                     square, six cells touching nothing — now toned from the
+ *                     same `ARCHETYPE_TONE` ramp the Agents cards and the
+ *                     promotable graph nodes use. So the Skeptic is the same
+ *                     shape and the same brightness in all three places, which
+ *                     the two-hue alternation actively prevented.
+ *   WHICH TURN IS LIVE  the row border BRIGHTENS as its turn arrives, from the
+ *                     default hairline to --line-strong. That is the one
+ *                     genuinely stateful thing in this transcript and it now
+ *                     has the contrast step to itself instead of sharing it
+ *                     with an alternation that meant nothing.
+ *
+ * `SIM_LINES[i].accent` is left in `content.ts` and no longer read here. It is
+ * content data rather than presentation, and it costs nothing to leave for
+ * whatever a later pass might want a warm/cool distinction FOR.
  */
-const ACCENT = {
-  cool: "var(--ink-signal)",
-  warm: "var(--ink-pulse)",
-} as const;
-
-/** The same two hues as borders. Tracks --ink-signal / --ink-pulse. */
-const BORDER = {
-  cool: "rgba(94,201,232,0.5)",
-  warm: "rgba(52,216,164,0.5)",
-} as const;
+const ROW_LIVE_BORDER = "rgba(245,245,245,0.38)";
 
 /**
  * The page's one pinned section.
@@ -32,12 +46,13 @@ const BORDER = {
  * full-viewport pin viable at 375px, where a pinned section carrying both the
  * copy and five speech turns would overflow.
  *
- * Feedback #4: the headline types on character-by-character behind a caret
- * that chases it, matching the turn-based terminal this section already
- * contains. Characters are revealed by opacity rather than by rewriting
- * textContent, so the heading keeps its real text in the DOM throughout —
- * it is the target of this section's `aria-labelledby`, and emptying it would
- * strip the section's accessible name mid-animation.
+ * The headline enters with `swoosh`, the page-wide signature move, like every
+ * other section headline. It used to type on character-by-character behind a
+ * chasing caret; that was a good fit for this section specifically and a bad
+ * fit for the page, which had five different headline entrances and therefore
+ * no entrance of its own. The caret survives the change as a trailing
+ * inline-block inside the heading, so the terminal texture this section wants
+ * is still there and it arrives on the same line as the words.
  */
 export function SimulationSection() {
   const root = useRef<HTMLElement>(null);
@@ -65,7 +80,6 @@ export function SimulationSection() {
         const cursors = rows.map((r) => r.querySelector<HTMLElement>(".sim-cursor"));
         const round = s.querySelector<HTMLElement>(".sim-round");
         const heading = s.querySelector<HTMLElement>(".sim-heading");
-        const caret = s.querySelector<HTMLElement>(".sim-heading-caret");
         const body = Array.from(s.querySelectorAll<HTMLElement>(".sim-body"));
         if (!stage || rows.length === 0) return;
 
@@ -73,12 +87,11 @@ export function SimulationSection() {
         if (reduced) {
           gsap.set(rows, { opacity: 1, y: 0 });
           gsap.set(cursors.filter(Boolean), { opacity: 0 });
-          if (caret) gsap.set(caret, { opacity: 0 });
           return;
         }
 
         const cleanups: (() => void)[] = [];
-        if (heading) cleanups.push(typeOn(heading, caret, s));
+        if (heading) cleanups.push(swoosh(heading, s));
         cleanups.push(bodyLineReveal(body, s));
 
         gsap.set(rows, { opacity: 0.18, y: 16 });
@@ -101,7 +114,7 @@ export function SimulationSection() {
         rows.forEach((row, i) => {
           const at = 0.4 + i * step;
           tl.to(row, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" }, at);
-          tl.to(row, { borderColor: BORDER[SIM_LINES[i].accent], duration: 0.4 }, at);
+          tl.to(row, { borderColor: ROW_LIVE_BORDER, duration: 0.4 }, at);
 
           const cursor = cursors[i];
           if (cursor) {
@@ -167,26 +180,39 @@ export function SimulationSection() {
                 className="sim-heading display-sm max-w-[14ch] text-[clamp(1.75rem,4.4vw,3rem)] text-ink"
               >
                 Then they run rounds without you.
+                {/* THE CARET IS INSIDE THE HEADING NOW, not absolutely
+                    positioned beside it.
+
+                    v5 chased it across the words with `typeOn`, which the
+                    signature `swoosh` entrance replaced. A caret that has
+                    nothing to chase has to be somewhere, and the only honest
+                    place is the end of the sentence — so it is a trailing
+                    inline-block, which means SplitText folds it into the last
+                    line and it swooshes in ON that line rather than being a
+                    separate element that has to be told where to land. The
+                    blink is pure CSS and is switched off under reduced motion
+                    by the global `prefers-reduced-motion` block, so this needs
+                    no JS branch at all. */}
+                <span
+                  aria-hidden="true"
+                  className="caret ml-[0.12em] inline-block h-[0.86em] w-[3px] translate-y-[0.04em] bg-[color:var(--ink-accent)] align-baseline"
+                />
               </h2>
-              <span
-                aria-hidden="true"
-                className="sim-heading-caret pointer-events-none absolute left-0 top-0 w-[3px] bg-[color:var(--ink-pulse)]"
-                style={{ height: "1em" }}
-              />
             </div>
           </div>
 
           <div className="max-w-[58ch] lg:pt-2">
             <p className="sim-body font-mono text-[15px] leading-relaxed text-ink-dim">
               Every round, each agent retrieves what it is allowed to know: its
-              own private notes plus whatever the shared graph and document
-              store will hand it. Then it reads what the others said in the
+              own private notes plus whatever the shared graph and the records
+              behind it will hand it. Then it reads what the others said in the
               previous round and answers in character.
             </p>
 
             <p className="sim-body mt-5 font-mono text-[15px] leading-relaxed text-ink-dim">
-              A rolling summary compresses everything older than the current
-              window, so round forty costs about the same context as round four.
+              A rolling summary compresses everything older than the last few
+              rounds, so an agent in round forty carries about as much of the
+              conversation as one in round four.
               The exchange below is illustrative, written to show one agent
               picking up what another just said.
             </p>
@@ -215,7 +241,7 @@ export function SimulationSection() {
                 SIMULATION LOOP / EXAMPLE
               </span>
               <span
-                className="sim-round hud-label text-[color:var(--ink-pulse)]"
+                className="sim-round hud-label text-[color:var(--ink-accent)]"
                 aria-hidden="true"
               >
                 TURN 01
@@ -228,14 +254,14 @@ export function SimulationSection() {
                   key={l.speaker}
                   className="sim-row panel flex items-start gap-4 p-4 sm:gap-5 sm:p-5"
                 >
-                  <Figure
+                  <CubeFigure
                     id={l.figure}
                     className="h-16 w-auto shrink-0 sm:h-[76px]"
-                    style={{ color: ACCENT[l.accent] }}
+                    tone={ARCHETYPE_TONE[l.figure]}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="hud-label" style={{ color: ACCENT[l.accent] }}>
+                      <span className="hud-label text-[color:var(--ink-accent)]">
                         {l.speaker.replace(/^The /, "").toUpperCase()}
                       </span>
                       {/* Same mark, per speaking turn: the agent currently
@@ -257,7 +283,7 @@ export function SimulationSection() {
             </ol>
 
             <p className="mt-5 font-mono text-[12px] text-ink-dim">
-              <span className="text-[color:var(--ink-pulse)]">
+              <span className="text-[color:var(--ink-accent)]">
                 rolling summary:
               </span>{" "}
               turns older than the current window are compressed into a single

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { gsap, JOURNEY_QUERIES } from "@/lib/gsap";
-import { Orb } from "./Orb";
+import { stage } from "@/lib/stage3d";
+import { CubeSigil } from "./CubeSigil";
 
 /** Matches the desktop HUD rail width. Keep in sync with `--rail-w`. */
 const RAIL_W = 88;
@@ -53,6 +54,41 @@ export const LINEAGE_ARRIVED = "pantheon:lineage-arrived";
  *      quarter it peels off onto a viewport path while the node it left dims
  *      and shrinks to a socket — the object has gone, the graph keeps the hole
  *      it came out of.
+ *   2b. THE DEPARTURE, and this is the fix for the bug the client described as
+ *      "when it hits the new page the graph is still at full scale and then
+ *      there is a small seed appearing at the start of next", and later, more
+ *      bluntly, as "the seed still sits opened even after i scroll past the
+ *      graph part and go towards orchestration".
+ *
+ *      WHAT WAS ACTUALLY WRONG. Nothing was broken in the sense of a thrown
+ *      error or a stuck listener. The graph never RECEDED. `CubeStage`'s
+ *      sticky box simply stopped being sticky when its column ran out and then
+ *      slid up the viewport as ordinary page content, at 100% scale and 100%
+ *      opacity the whole way. Measured at 1440x900 before this pass: the box
+ *      released at scrollY 4968 and did not clear the top of the screen until
+ *      5868 — a full viewport, 900px, of a full-size constellation sliding
+ *      past while the Agents heading was already on screen underneath it, and
+ *      all of that on top of ~750px of dwell before it. So for roughly 1650px
+ *      of scrolling the graph was the thing on screen and nothing about it
+ *      changed, which is exactly what "still sits opened" describes. Meanwhile
+ *      this controller's flyer was off doing its own scrubbed travel, at a
+ *      quarter of the size, unrelated to any of it.
+ *
+ *      THE FIX. The graph's exit is now driven from inside this same
+ *      `place()`, on the same frame, off the same progress — `stage.frame
+ *      .depart` — so the big thing leaving and the small thing arriving are
+ *      one gesture rather than two. `depart` shrinks the 3D group toward the
+ *      point the flyer left from and fades it out, and at 1 the scene stops
+ *      rendering altogether. It is timed to finish BEFORE the sticky box would
+ *      begin to slide, so the 900px of passive scroll-away now happens with
+ *      nothing left in the box to see.
+ *
+ *      It has two terms and the larger wins. The lead term is the scrub, which
+ *      is what ties it to the flyer. The floor is geometric: the sticky column
+ *      knows exactly when it is about to stop holding, and by then the recede
+ *      has to be over no matter what any progress value says. That backstop is
+ *      why this cannot regress into "the graph slid away at full size" at some
+ *      viewport height nobody measured.
  *   3. THE TRAVEL. A viewport path, not a document path: the flyer holds
  *      around 40-52vh with a slight lateral arc, so it descends with the
  *      scrollbar the way the first leg did. Lerping straight at the live
@@ -60,7 +96,7 @@ export const LINEAGE_ARRIVED = "pantheon:lineage-arrived";
  *      then drag it back up as the target scrolled in.
  *   4. THE ARRIVAL. Past 66% it converges on `.orch-sigil` — measured live
  *      every frame — matching that element's size as it goes. `.orch-sigil` is
- *      a `SeedCore` sitting exactly on the orb at the top of the Orchestrator's
+ *      a `CubeMark` sitting exactly on the crown cube at the top of the Orchestrator's
  *      staff, so the sigil does not land NEXT to the figure, it lands as the
  *      light the figure is holding.
  *   5. THE HANDOVER. Past 86% the Orchestrator's wireframe draws itself in
@@ -109,9 +145,16 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
         const hub = s.querySelector<HTMLElement>(".agents-hub");
         const flyer = s.querySelector<HTMLElement>(".relay-flyer");
         const flyerInner = s.querySelector<HTMLElement>(".relay-flyer-inner");
-        // The one thing that lives outside this component's subtree.
+        // The things that live outside this component's subtree, all in the
+        // Seed/Graph journey it takes the lineage over from.
         const graphVisual = document.querySelector<HTMLElement>(".graph-visual");
         const graphOrb = document.querySelector<HTMLElement>(".graph-center-orb");
+        const graphStill = document.querySelector<HTMLElement>(".graph-still");
+        // The sticky column `CubeStage` holds the 3D scene in. Only ever READ,
+        // and only for its bottom edge — see the departure note above for why
+        // that edge is the honest backstop for "the graph is about to slide".
+        const stageColumn =
+          document.querySelector<HTMLElement>(".cube-stage-column");
 
         const strokes = orchWrap
           ? Array.from(orchWrap.querySelectorAll<SVGElement>(".orch-stroke"))
@@ -131,6 +174,12 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
           gsap.set([strokes, joints], { strokeDashoffset: 0, opacity: 1 });
           if (orchSigil) gsap.set(orchSigil, { opacity: 1, scale: 1 });
           if (graphOrb) gsap.set(graphOrb, { opacity: 1, scale: 1 });
+          // No travel means no departure: the graph is simply present and then
+          // simply scrolled past, which is the correct reduced-motion and
+          // narrow-viewport reading of this beat. `depart` must be left at 0 so
+          // nothing downstream thinks the scene has been dismissed — and on
+          // both of those branches `CubeStage` never mounts a scene anyway.
+          stage.frame.depart = 0;
           return;
         }
 
@@ -191,6 +240,9 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
           // layout pass per measurement.
           const g = graphOrb.getBoundingClientRect();
           const t = orchSigil.getBoundingClientRect();
+          const colBottom = stageColumn
+            ? stageColumn.getBoundingClientRect().bottom
+            : Infinity;
 
           const srcX = g.left + g.width / 2;
           const srcY = g.top + g.height / 2;
@@ -234,6 +286,49 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
           // rather than appearing next to it.
           const entry = smoothstep(clamp01((p - 0.02) / 0.1));
 
+          /**
+           * THE DEPARTURE. See the long note at the top of this file.
+           *
+           * Two terms, larger wins.
+           *
+           * `byScrub` is the lead and it is what makes this one gesture: it
+           * opens at p = 0.115, which is inside the flyer's own detach window
+           * (0.04 -> 0.28), so the graph starts folding away while the sigil
+           * is visibly peeling out of the middle of it, and it is finished by
+           * p = 0.275 — long before the flyer lands at 0.66. There is
+           * therefore no span of the scroll where a full-size graph and a
+           * small independent sigil are both on screen.
+           *
+           * WHY IT CLOSES SO EARLY. Client, on the first version: "it shrinks
+           * but then the actual graph also moved down". The recede has to be
+           * OVER before the sticky box releases, or the last part of it plays
+           * while the box is also sliding and the two motions read as one
+           * confused one. Measured at 1440x900 with the current spacer the box
+           * releases at scrollY 4716 and this window closes at about 4640 —
+           * 76px of margin, roughly one wheel notch, and `byGeometry` below
+           * guarantees the margin never goes negative.
+           *
+           * `byGeometry` is the floor, and it is the reason this cannot rot.
+           * A sticky box stops holding the instant its container's bottom edge
+           * reaches the bottom of the viewport, so `colBottom` counts down to
+           * exactly `vh` at that moment. This term is finished at 1.06vh —
+           * BEFORE the release rather than at it — so at any viewport height,
+           * and whatever anyone later does to the dwell spacer's length, the
+           * graph is gone by the time the box starts to move. Under the
+           * measured geometry the scrub term gets there first and the floor
+           * never binds; it exists so that "the graph slid away while it was
+           * still shrinking" is not reachable.
+           */
+          const byScrub = smoothstep(clamp01((p - 0.115) / 0.16));
+          const byGeometry = smoothstep(
+            clamp01((vh * 1.3 - colBottom) / (vh * 0.24)),
+          );
+          const depart = Math.max(byScrub, byGeometry);
+          // The 3D scene reads this and does the actual receding. One number,
+          // written once per frame, no React state — the same contract every
+          // other field on `stage.frame` already has.
+          stage.frame.depart = depart;
+
           gsap.set(flyer, { x, y, scale, opacity: entry * (1 - fade) });
           // The flyer swells slightly as it lands, then settles — the same
           // "gulp" pulse the first leg uses, on the inner wrapper so it never
@@ -243,14 +338,39 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
           // The vacated node. Its opacity rides `entry` so it hands over to
           // the flyer on the same short ramp; its scale rides `detach`, which
           // is slower, so the socket keeps shrinking for a while after the
-          // sigil has left. Not taken to zero: the graph's edges all run to
-          // this point and an empty junction reads as a rendering fault, where
-          // a dim socket reads as somewhere something used to be.
+          // sigil has left. Not taken to zero by `entry`: the graph's edges all
+          // run to this point and an empty junction reads as a rendering
+          // fault, where a dim socket reads as somewhere something used to be.
+          // It IS taken to zero by `depart`, along with everything else in the
+          // graph, because by then there is no graph left for it to be a
+          // junction of.
           gsap.set(graphOrb, {
-            opacity: lerp(1, 0.32, entry),
-            scale: lerp(1, 0.62, detach),
+            opacity: lerp(1, 0.32, entry) * (1 - depart),
+            scale: lerp(1, 0.62, detach) * (1 - 0.55 * depart),
             transformOrigin: "50% 50%",
           });
+
+          // THE FLAT GRAPH, on the wide/motion branch that has no WebGL.
+          //
+          // `.graph-still` is the server-rendered isometric SVG of the same
+          // dispersed layout, and on that branch it is the graph — so it has
+          // to recede on exactly the same curve the mesh does, or the no-WebGL
+          // page keeps the bug the WebGL page just lost. It shrinks toward its
+          // own centre, which is where the orb and therefore the flyer left
+          // from.
+          //
+          // `stage.live &&` gate, and it is not optional: when a real scene IS
+          // mounted this element must stay at zero, and `SeedJourney` is the
+          // thing that decided that. Writing `1 - depart` here unconditionally
+          // would turn the flat still back on underneath the live canvas — the
+          // same doubling this file already documents at its own crossfade.
+          if (graphStill) {
+            gsap.set(graphStill, {
+              opacity: stage.live ? 0 : 1 - depart,
+              scale: 1 - 0.72 * depart,
+              transformOrigin: "50% 50%",
+            });
+          }
 
           // Opacity only. The destination deliberately does NOT scale up into
           // place: the flyer is already sized to this element's layout width,
@@ -307,6 +427,12 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
             clearProps: "strokeDashoffset,opacity",
           });
           gsap.set([orchSigil, graphOrb], { clearProps: "opacity,transform" });
+          if (graphStill) gsap.set(graphStill, { clearProps: "opacity,transform" });
+          // `depart` is this controller's alone, and a context that has been
+          // reverted is not entitled to leave the scene dismissed — a resize
+          // across 1024 and back would otherwise land on a graph that had been
+          // faded out by a driver that no longer exists.
+          stage.frame.depart = 0;
         };
       });
     };
@@ -337,7 +463,7 @@ export function GraphRelay({ children }: { children: React.ReactNode }) {
         className="relay-flyer pointer-events-none fixed left-0 top-0 z-30 hidden w-[190px] will-change-transform lg:block"
       >
         <div className="relay-flyer-inner">
-          <Orb uid="relay" className="h-auto w-full" />
+          <CubeSigil uid="relay" className="h-auto w-full" />
         </div>
       </div>
 

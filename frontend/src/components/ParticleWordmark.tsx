@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { gsap, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
-import { SeedCore } from "./SeedCore";
+import { CubeMark } from "./CubeFigure";
 
 /**
  * Grid sizes tried in order, in canvas pixels. Sampling starts dense and
@@ -55,7 +55,7 @@ type Particle = {
  * `requestAnimationFrame` loop instead of per-element GSAP tweens:
  *
  *   1. The word is still sampled from a real offscreen canvas trace in
- *      Orbitron 900, after `document.fonts.load` resolves — unchanged
+ *      Sora 800, after `document.fonts.load` resolves — unchanged
  *      mechanic, just a much finer adaptive grid (down to 1px) and a 20,000
  *      point cap instead of 600.
  *   2. Particle state lives in a plain array of small objects, not DOM
@@ -135,14 +135,32 @@ export function ParticleWordmark() {
           const cxt = sampler.getContext("2d", { willReadFrequently: true });
           if (!cxt) return { pts: [] as { x: number; y: number }[], grid: 1 };
 
+          // SIZED FROM A MEASUREMENT, NOT FROM A CONSTANT — which is what
+          // makes this survive the Orbitron -> Sora swap. `refW` is the real
+          // width of the real word in the real face at a reference size, so
+          // the solve below lands on whatever size fills the box in whichever
+          // face is actually resolved.
+          //
+          // The two caps DID have to be re-checked, because they are the part
+          // that is not measured. Sora is about 22% narrower than Orbitron at
+          // the same size, so the width-driven candidate comes out roughly a
+          // fifth larger — and against the old `h * 0.8` height cap the height
+          // became the binding constraint at every breakpoint, which parked
+          // the word at ~78% of the box width and left it visibly floating
+          // inside its own container. Sora's cap height is also a smaller
+          // fraction of its em than Orbitron's, so `h * 0.8` was reserving
+          // room for ascender/descender space this word does not use:
+          // "PANTHEON" is all caps, no descenders. The cap goes to 0.94, which
+          // brings the width back to the binding constraint at 375, 768, 1024
+          // and 1440, and 0.92 of the box width is the size that ships.
           const REF = 100;
-          cxt.font = `900 ${REF}px Orbitron, sans-serif`;
+          cxt.font = `800 ${REF}px Sora, sans-serif`;
           const refW = cxt.measureText("PANTHEON").width;
           if (!refW) return { pts: [], grid: 1 };
-          const size = Math.min((w * 0.92 * REF) / refW, h * 0.8);
+          const size = Math.min((w * 0.92 * REF) / refW, h * 0.94);
 
           cxt.clearRect(0, 0, sampler.width, sampler.height);
-          cxt.font = `900 ${size}px Orbitron, sans-serif`;
+          cxt.font = `800 ${size}px Sora, sans-serif`;
           cxt.textAlign = "center";
           cxt.textBaseline = "middle";
           cxt.fillStyle = "#000";
@@ -447,11 +465,11 @@ export function ParticleWordmark() {
       });
     };
 
-    // Orbitron has to be resolved before the canvas is traced, or the sample
+    // Sora has to be resolved before the canvas is traced, or the sample
     // follows the fallback face's letterforms.
     if (document.fonts) {
       document.fonts
-        .load('900 100px "Orbitron"')
+        .load('800 100px "Sora"')
         .then(() => document.fonts.ready)
         .then(boot)
         .catch(boot);
@@ -481,7 +499,7 @@ export function ParticleWordmark() {
         aria-hidden="true"
         className="pw-seed pointer-events-none absolute left-1/2 top-1/2 block w-[54px] -translate-x-1/2 -translate-y-1/2 sm:w-[64px]"
       >
-        <SeedCore uid="wordmark" className="h-auto w-full" />
+        <CubeMark uid="wordmark" className="h-auto w-full" />
       </span>
       <p className="pw-fallback pointer-events-none display absolute inset-0 flex items-center justify-center text-[11vw] leading-none text-ink sm:text-[9vw] lg:text-[clamp(3rem,8vw,7rem)]">
         PANTHEON

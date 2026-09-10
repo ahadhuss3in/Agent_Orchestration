@@ -160,7 +160,7 @@ export function WaitlistDialog() {
               {status === "error" && error && (
                 <p
                   role="alert"
-                  className="mt-4 font-mono text-[12.5px] text-[color:var(--ink-ignis)]"
+                  className="mt-4 font-mono text-[12.5px] text-[color:var(--ink-accent)]"
                 >
                   {error}
                 </p>

@@ -3,25 +3,32 @@
 import { gsap, SplitText } from "@/lib/gsap";
 
 /**
- * Per-section headline treatments.
+ * Headline and body text treatments.
  *
- * Client feedback #4: six sections were all doing the same fade-up. Each of
- * these is picked to fit what its section is actually about, not for
- * decoration —
+ * THE SIGNATURE MOVE (v6). Every section headline on the page now enters with
+ * `swoosh` — see the long note over it. That replaces the five different
+ * per-section headline treatments v5 shipped (`maskWipe`, `assemble`,
+ * `typeOn`, `blurFocus`), which were individually well-judged but collectively
+ * meant the page had no entrance of its own: a reader who had scrolled the
+ * whole thing could not have told you what "a Pantheon headline does", because
+ * it did five things. One move, used everywhere, is the point.
  *
- *   maskWipe    Graph        lines wipe out from behind a mask: "revealing
- *                            structure that was already there"
- *   assemble    Agents       words pop in with scale + rotation: pieces
- *                            being assembled into a cast
- *   typeOn      Simulation   characters type on behind a caret, matching the
- *                            turn-based terminal already in that section
- *   blurFocus   Chat         blur-to-focus: an agent coming into resolution
- *   countIn     Recap        numerals count up in sequence
+ * The four superseded treatments are DELETED rather than left in place. A
+ * helper nobody calls is a helper that quietly rots, and `maskWipe` in
+ * particular could not coexist with the new move anyway: its line masks clip
+ * horizontally, and the whole signature is a sideways overshoot.
+ *
+ * What survives, because none of it is a headline entrance:
+ *
+ *   bodyLineReveal  the calmer line lift, still the treatment for body copy
+ *   countIn         Recap's pipeline numerals counting up in sequence
+ *   typeChars       the persona descriptions typing on
+ *   gesture         a persona figure's lean-and-settle talk beat
  *
  * Every one of these returns a cleanup that reverts its SplitText, and every
  * one is only ever called from inside a `gsap.matchMedia()` motion branch —
  * the reduced branch never splits anything and leaves the markup at its
- * already-final state.
+ * already-final state, which is the finished, legible one.
  */
 
 export type Cleanup = () => void;
@@ -53,136 +60,112 @@ export function bodyLineReveal(
   return () => splits.forEach((s) => s.revert());
 }
 
-/** Graph — line-by-line mask wipe. */
-export function maskWipe(el: HTMLElement, trigger: HTMLElement): Cleanup {
+/**
+ * THE SIGNATURE ENTRANCE.
+ *
+ * The client described it in their own words: text should "swoosh in from the
+ * bottom and shoot a bit up sideways and come back". So: a line starts below
+ * and offset to one side of where it will end up, travels up AND across on one
+ * continuous arc, carries PAST its resting place, and settles back into it.
+ * Not a fade-up. The overshoot is the whole point — the line has to visibly
+ * go too far before it comes home, or the move reads as an ease and not as a
+ * gesture.
+ *
+ * WHERE THE NUMBERS COME FROM. The reference the client pointed at could not
+ * be read from source, but they also supplied `List-9-16.json`, a real
+ * Bodymovin export of the motion family they want. It was rendered rather than
+ * guessed at, and its main mover's position track is a damped lateral
+ * overshoot with a secondary ripple — quantised off the keyframes, against a
+ * resting x of 56 units:
+ *
+ *   t = 0.05s   x = 56      at rest, about to go
+ *   t = 0.20s   x = 94.6    +38.6, most of the way out
+ *   t = 0.25s   x = 99.1    +43.1, PEAK OVERSHOOT
+ *   t = 0.32s   x = 73.6    +17.6, coming back, past centre-ish
+ *   t = 0.40s   x = 60.8    +4.8,  a small second ripple
+ *   ~t = 0.47s              home
+ *
+ * The three keyframe legs below are that shape: out to a hard overshoot on a
+ * decelerating ease, back through a smaller counter-overshoot, then home. The
+ * ratios are preserved and the whole thing is stretched by about 2x, because
+ * a headline is an order of magnitude larger on screen than a list item and
+ * the same timing reads as a twitch at that size.
+ *
+ * The Lottie also fans its items around an arc — 7.5 degrees of rotation per
+ * slot — which is where the small per-line rotation comes from. It decays with
+ * line index so a three-line headline lands flat rather than stacking tilt.
+ *
+ * NO LINE MASK, DELIBERATELY. `mask: "lines"` wraps each line in an
+ * `overflow: hidden` box, which is exactly what the superseded `maskWipe`
+ * relied on — and it would clip the sideways half of this move dead. The line
+ * is un-masked and simply starts transparent, which is also what makes the
+ * approach visible: you watch it arrive rather than watching it appear from
+ * behind an edge.
+ *
+ * Reduced motion never reaches this function. Callers gate on
+ * `gsap.matchMedia()` and the reduced branch leaves the headline at rest,
+ * which is its default markup state.
+ */
+export function swoosh(el: HTMLElement, trigger: HTMLElement): Cleanup {
   const split = SplitText.create(el, {
     type: "lines",
-    mask: "lines",
-    linesClass: "split-line",
+    linesClass: "split-line-open",
   });
   const lines = split.lines as HTMLElement[];
-
-  gsap.set(lines, { yPercent: 112, opacity: 0, skewY: 3 });
-  gsap.to(lines, {
-    yPercent: 0,
-    opacity: 1,
-    skewY: 0,
-    duration: 1.05,
-    ease: "expo.out",
-    stagger: 0.1,
-    scrollTrigger: { trigger, start: "top 72%", once: true },
-  });
-
-  return () => split.revert();
-}
-
-/** Agents — words popping in, scaled and rotated, like pieces assembling. */
-export function assemble(el: HTMLElement, trigger: HTMLElement): Cleanup {
-  const split = SplitText.create(el, { type: "lines,words", linesClass: "split-line" });
-  const words = split.words as HTMLElement[];
-
-  gsap.set(words, {
-    opacity: 0,
-    scale: 0.55,
-    rotation: (i: number) => (i % 2 ? 7 : -7),
-    transformOrigin: "50% 100%",
-  });
-  gsap.to(words, {
-    opacity: 1,
-    scale: 1,
-    rotation: 0,
-    duration: 0.72,
-    ease: "back.out(2.4)",
-    stagger: { each: 0.055, from: "start" },
-    scrollTrigger: { trigger, start: "top 72%", once: true },
-  });
-
-  return () => split.revert();
-}
-
-/**
- * Simulation — characters type on with a blinking caret chasing them.
- *
- * Characters are revealed by opacity rather than by rewriting textContent, so
- * the heading keeps its real text in the DOM the whole time. That matters:
- * this headline is the target of an `aria-labelledby`, and emptying it would
- * strip the section's accessible name for however long the animation runs.
- */
-export function typeOn(
-  el: HTMLElement,
-  caret: HTMLElement | null,
-  trigger: HTMLElement,
-): Cleanup {
-  const split = SplitText.create(el, { type: "lines,words,chars" });
-  const chars = split.chars as HTMLElement[];
-  if (chars.length === 0) {
+  if (lines.length === 0) {
     split.revert();
     return NOOP;
   }
 
-  gsap.set(chars, { opacity: 0 });
-  if (caret) gsap.set(caret, { opacity: 0 });
-
-  const state = { i: 0 };
-  const place = (idx: number) => {
-    if (!caret) return;
-    const c = chars[Math.min(idx, chars.length - 1)];
-    if (!c) return;
-    gsap.set(caret, {
-      x: c.offsetLeft + (idx >= chars.length ? c.offsetWidth : 0),
-      y: c.offsetTop,
-      height: c.offsetHeight || 20,
-    });
-  };
-
-  const tl = gsap.timeline({
-    scrollTrigger: { trigger, start: "top 72%", once: true },
+  // Bottom-left. The line pivots around the corner it is travelling away
+  // from, so the rotation reads as part of the arc rather than as a spin.
+  gsap.set(lines, {
+    yPercent: 116,
+    xPercent: -13,
+    rotation: (i: number) => 3.2 / (i + 1),
+    opacity: 0,
+    transformOrigin: "0% 100%",
+    force3D: true,
   });
 
-  if (caret) {
-    tl.set(caret, { opacity: 1, onComplete: () => place(0) });
-  }
-
-  tl.to(state, {
-    i: chars.length,
-    duration: Math.min(2.1, chars.length * 0.028),
-    ease: "none",
-    onUpdate: () => {
-      const upto = Math.round(state.i);
-      for (let n = 0; n < chars.length; n++) {
-        chars[n].style.opacity = n < upto ? "1" : "0";
-      }
-      place(upto);
-    },
+  const tween = gsap.to(lines, {
+    keyframes: [
+      {
+        // OUT. Up past the resting line and across past it too.
+        yPercent: -14,
+        xPercent: 6.5,
+        rotation: (i: number) => -1.1 / (i + 1),
+        opacity: 1,
+        duration: 0.42,
+        ease: "power3.out",
+      },
+      {
+        // BACK, and slightly too far the other way — the second ripple.
+        yPercent: 3.6,
+        xPercent: -1.8,
+        rotation: (i: number) => 0.32 / (i + 1),
+        duration: 0.24,
+        ease: "sine.inOut",
+      },
+      {
+        // HOME.
+        yPercent: 0,
+        xPercent: 0,
+        rotation: 0,
+        duration: 0.3,
+        ease: "power2.out",
+      },
+    ],
+    // Roughly a third of one line's own travel time, so a multi-line headline
+    // reads as one gesture crossing it rather than as separate lines.
+    stagger: 0.13,
+    scrollTrigger: { trigger, start: "top 78%", once: true },
   });
-
-  // Caret stops chasing and settles into the CSS blink at the end.
-  if (caret) tl.add(() => caret.classList.add("caret", "ambient"));
 
   return () => {
-    tl.kill();
-    caret?.classList.remove("caret", "ambient");
+    tween.kill();
     split.revert();
   };
-}
-
-/** Chat — soft blur-to-focus, an agent resolving into view. */
-export function blurFocus(el: HTMLElement, trigger: HTMLElement): Cleanup {
-  const split = SplitText.create(el, { type: "lines", linesClass: "split-line-open" });
-  const lines = split.lines as HTMLElement[];
-
-  gsap.set(lines, { opacity: 0, filter: "blur(9px)", y: 10 });
-  gsap.to(lines, {
-    opacity: 1,
-    filter: "blur(0px)",
-    y: 0,
-    duration: 1.15,
-    ease: "power2.out",
-    stagger: 0.12,
-    scrollTrigger: { trigger, start: "top 74%", once: true },
-  });
-
-  return () => split.revert();
 }
 
 /**

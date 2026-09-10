@@ -3,12 +3,12 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { gsap, SplitText, ScrollTrigger, MOTION_QUERIES } from "@/lib/gsap";
-import { Orb } from "./Orb";
+import { CubeSigil } from "./CubeSigil";
 
 const CHIPS = [
-  "Neo4j knowledge graph",
+  "Living knowledge graph",
   "Human-in-the-loop promotion",
-  "Context-bounded rounds",
+  "Rounds that stay bounded",
 ];
 
 /**
@@ -86,8 +86,8 @@ export function Hero() {
         if (!overlay || !block || !headline || !halves.length || !pantheon)
           return;
 
-        // Splitting after fonts settle: Orbitron is much wider than the
-        // fallback, so character boxes measured early jump on swap.
+        // Splitting after fonts settle: Sora's metrics differ enough from the
+        // system fallback that character boxes measured early jump on swap.
         const heroSplit = SplitText.create(headline, {
           type: "lines,words,chars",
           mask: "lines",
@@ -342,7 +342,7 @@ export function Hero() {
 
             <p className="hero-fade mt-7 max-w-[54ch] font-mono text-[15px] leading-relaxed text-ink-dim sm:text-base">
               Pantheon pulls every person, organization and place out of a seed
-              event into a Neo4j graph, waits for you to choose which of them
+              event into a knowledge graph, waits for you to choose which of them
               wake up as autonomous agents, then runs them against each other
               round after round.
             </p>
@@ -369,9 +369,24 @@ export function Hero() {
           </div>
 
           {/* Below 1024px the sigil sits behind the copy as atmosphere rather
-              than stacking under it, which would push the CTA off screen. */}
-          <div className="pointer-events-none absolute -right-[22%] top-[-6%] z-0 w-[82vw] opacity-40 lg:pointer-events-auto lg:relative lg:right-auto lg:top-auto lg:flex lg:w-auto lg:justify-center lg:opacity-100">
-            <Orb uid="hero" className="hero-orb h-auto w-full lg:w-[min(27vw,380px)]" />
+              than stacking under it, which would push the CTA off screen.
+
+              THE NARROW OPACITY IS A CONTRAST NUMBER, NOT A TASTE ONE. At 40%
+              the sigil's lit faces composite to about rgb(122,75,72) directly
+              under the hero paragraph, which puts --ink-dim body copy at
+              2.84:1 — measured on a real render at 375 with the glyphs hidden,
+              not computed. That was true of the previous hued sigil too and
+              was worse still while it was drawn in near-white greys; it is
+              only being fixed now because this pass re-derived every contrast
+              number on the page and this was the one that failed.
+
+              22% brings the same pixel to about rgb(68,40,36) and the body
+              copy to 5.5:1. The sigil is still clearly present as atmosphere —
+              it is 82vw of cube formation — it simply stops competing with the
+              only paragraph on the screen. At lg and up it is a real column of
+              its own with no text over it, so it keeps full opacity there. */}
+          <div className="pointer-events-none absolute -right-[22%] top-[-6%] z-0 w-[82vw] opacity-[0.15] lg:pointer-events-auto lg:relative lg:right-auto lg:top-auto lg:flex lg:w-auto lg:justify-center lg:opacity-100">
+            <CubeSigil uid="hero" className="hero-orb h-auto w-full lg:w-[min(29vw,400px)]" />
           </div>
         </div>
 

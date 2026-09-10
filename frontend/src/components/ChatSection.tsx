@@ -3,11 +3,11 @@
 import { useEffect, useRef } from "react";
 import { gsap, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
-import { blurFocus, bodyLineReveal } from "@/lib/textAnim";
+import { bodyLineReveal, swoosh } from "@/lib/textAnim";
 import { useInViewClass } from "@/lib/useInViewClass";
 import { CHAT_MOCK } from "@/lib/content";
-import { Figure } from "./WireframeFigures";
-import { SeedCore } from "./SeedCore";
+import { ARCHETYPE_TONE } from "@/lib/cubes";
+import { CubeFigure, CubeMark } from "./CubeFigure";
 
 /**
  * Not pinned. A static, clearly-labelled mock of the post-simulation 1:1
@@ -42,7 +42,7 @@ export function ChatSection() {
         const body = Array.from(s.querySelectorAll<HTMLElement>(".chat-body"));
 
         const cleanups: (() => void)[] = [];
-        if (heading) cleanups.push(blurFocus(heading, s));
+        if (heading) cleanups.push(swoosh(heading, s));
         cleanups.push(bodyLineReveal(body, s));
         return () => cleanups.forEach((c) => c());
       });
@@ -88,11 +88,11 @@ export function ChatSection() {
             <p className="chat-body mt-7 max-w-[56ch] font-mono text-[15px] leading-relaxed text-ink-dim">
               The simulation stops, the transcript stays. Open a direct 1:1 chat
               with any agent and it answers in character, with everything it
-              said and everything it retrieved during the run still in memory.
+              said and everything it drew on during the run still in memory.
             </p>
 
             <p className="chat-body mt-5 max-w-[56ch] font-mono text-[15px] leading-relaxed text-ink-dim">
-              Same persona, same scoped knowledge that was in play during the
+              Same persona, same slice of the graph that was in play during the
               rounds. So you can interrogate a decision the agent actually made
               instead of guessing at why it made it.
             </p>
@@ -118,22 +118,30 @@ export function ChatSection() {
                     mark is that it goes all the way back to the sentence you
                     typed. No ring at this size — the dashes fill in. */}
                 <span className="relative inline-block shrink-0">
-                  <Figure
+                  {/* The Skeptic's own step off the shared tone ramp, not the
+                      section accent. It is the same agent that spoke in the
+                      Simulation transcript and the same one a node can be
+                      promoted into three sections earlier, so it has to be the
+                      same brightness in all three places — that consistency is
+                      what the archetype ramp is FOR now that there is no hue
+                      to carry it. */}
+                  <CubeFigure
                     id="skeptic"
-                    className="h-[68px] w-auto text-[color:var(--ink-wire)]"
+                    tone={ARCHETYPE_TONE.skeptic}
+                    className="h-[72px] w-auto"
                   />
                   <span
                     aria-hidden="true"
                     className="absolute left-1/2 top-[38%] block w-[15px] -translate-x-1/2 -translate-y-1/2"
                   >
-                    <SeedCore uid="chat" ring={false} className="h-auto w-full" />
+                    <CubeMark uid="chat" className="h-auto w-full" />
                   </span>
                 </span>
                 <div className="min-w-0">
                   <p className="display-sm text-base text-ink">The Skeptic</p>
                   <p className="hud-label mt-1.5 text-ink-dim">POST-RUN SESSION</p>
                 </div>
-                <span className="hud-label ml-auto shrink-0 text-[color:var(--ink-wire)]">
+                <span className="hud-label ml-auto shrink-0 text-[color:var(--ink-accent)]">
                   IN CHARACTER
                 </span>
               </div>
@@ -150,9 +158,16 @@ export function ChatSection() {
                     <div
                       className={[
                         "max-w-[85%] rounded-sm border bg-paper p-3.5",
+                        // The agent's turn gets the brighter border, the
+                        // operator's the default hairline. Same brightness
+                        // step the Simulation transcript uses for a live turn,
+                        // and it is doing the same job: saying which side of
+                        // the exchange this bubble is, without a second hue
+                        // and without relying on the left/right alignment
+                        // alone.
                         m.from === "operator"
                           ? "border-line"
-                          : "border-[color:rgba(143,178,255,0.4)]",
+                          : "border-[color:var(--line-strong)]",
                       ].join(" ")}
                     >
                       <span
@@ -160,7 +175,7 @@ export function ChatSection() {
                           "hud-label",
                           m.from === "operator"
                             ? "text-ink-dim"
-                            : "text-[color:var(--ink-wire)]",
+                            : "text-[color:var(--ink-accent)]",
                         ].join(" ")}
                       >
                         {m.from === "operator" ? "OPERATOR" : "THE SKEPTIC"}
@@ -183,7 +198,7 @@ export function ChatSection() {
                 <span className="font-mono text-[13px] text-ink-dim">
                   Ask The Skeptic something
                 </span>
-                <span className="caret ambient ml-auto inline-block h-4 w-[7px] bg-[color:var(--ink-wire)]" />
+                <span className="caret ambient ml-auto inline-block h-4 w-[7px] bg-[color:var(--ink-accent)]" />
               </div>
 
               <p className="mt-3 font-mono text-[11px] text-ink-dim">
