@@ -1,44 +1,57 @@
-### Orchestration engine graph.
-### M12: intake_seed. M14: fetch_context, real seeds only.
-### M15: extract_entities, both paths converge into it.
-### M16: write_to_graph, writes extraction results into Neo4j.
-### M17: await_agent_selection pauses via interrupt() for a human to pick
-### which entities become agents, then build_agent_profiles turns the pick
-### into real AgentProfiles. A checkpointer is required for interrupt()/
-### Command(resume=...) to work, so one is added at compile time here.
-### M19/M20: simulate runs every selected agent through a fixed number of
-### rounds, folding each round into a rolling summary.
+### The knowledge-base pipeline graph.
+###
+### This is the LangGraph wiring for turning one seed into a queryable
+### knowledge base. Read the nodes in order:
+###
+###   intake_seed       PDF on disk -> plain text + identity
+###   fetch_context     real seeds only: pull live articles via Tavily
+###   store_context     chunk + embed + write to Qdrant under this seed_id
+###   extract_entities  chunk-by-chunk LLM extraction with provenance
+###   write_to_graph    entities + relationships into Neo4j (per-seed)
+###
+### After write_to_graph the seed's knowledge base exists in two places:
+### raw context in Qdrant, structured entities/relationships in Neo4j, and
+### the two are bridged by ids (Qdrant chunks carry entity_ids, Neo4j nodes
+### carry source_chunk_ids). Retrieval (Graph RAG) is built separately later.
+###
+### HOW LANGGRAPH THINKS, since this is the first graph you own:
+###   StateGraph(SomeState)  declares what the shared state looks like.
+###   add_node("name", fn)   registers a function under a name.
+###   add_edge(a, b)         b always runs after a.
+###   add_conditional_edges  picks the next node at runtime with a function
+###                          that returns one of the listed names.
+###   set_entry_point        which node runs first.
+###   compile()              freezes the wiring into a runnable object.
 
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
-from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
-from services.Orchestration.nodes.intake import intake_seed
-from services.Orchestration.nodes.fetch_context import fetch_context
+from langgraph.graph import END, StateGraph
+
 from services.Orchestration.nodes.extract_entities import extract_entities
+from services.Orchestration.nodes.fetch_context import fetch_context
+from services.Orchestration.nodes.intake import intake_seed
+from services.Orchestration.nodes.store_context import store_context
 from services.Orchestration.nodes.write_to_graph import write_to_graph
-from services.Orchestration.nodes.await_agent_selection import await_agent_selection
-from services.Orchestration.nodes.build_agent_profiles import build_agent_profiles
-from services.Orchestration.nodes.simulate import simulate
+from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
 
 graph = StateGraph(OrchestrationState)
 
 graph.add_node("intake_seed", intake_seed)
 graph.add_node("fetch_context", fetch_context)
+graph.add_node("store_context", store_context)
 graph.add_node("extract_entities", extract_entities)
 graph.add_node("write_to_graph", write_to_graph)
-graph.add_node("await_agent_selection", await_agent_selection)
-graph.add_node("build_agent_profiles", build_agent_profiles)
-graph.add_node("simulate", simulate)
 
 
 def route_after_intake(state: OrchestrationState):
-    """Real seeds go fetch real-world context first. Fictional seeds skip
-    straight to extraction, there's nothing real to look up for those.
-    Either way, both paths end up at extract_entities.
+    """Real seeds go fetch live context first. Fictional seeds have nothing
+    real to look up, so they skip straight to storage.
+
+    NOTE: both branches MUST end up at store_context. Storage is not optional
+    for fictional seeds, their own PDF text still has to get into Qdrant or
+    there is nothing for the knowledge base to retrieve later.
     """
     if state["seed_type"] == "real":
         return "fetch_context"
-    return "extract_entities"
+    return "store_context"
 
 
 graph.set_entry_point("intake_seed")
@@ -47,14 +60,12 @@ graph.add_conditional_edges(
     route_after_intake,
     {
         "fetch_context": "fetch_context",
-        "extract_entities": "extract_entities",
+        "store_context": "store_context",
     },
 )
-graph.add_edge("fetch_context", "extract_entities")
+graph.add_edge("fetch_context", "store_context")
+graph.add_edge("store_context", "extract_entities")
 graph.add_edge("extract_entities", "write_to_graph")
-graph.add_edge("write_to_graph", "await_agent_selection")
-graph.add_edge("await_agent_selection", "build_agent_profiles")
-graph.add_edge("build_agent_profiles", "simulate")
-graph.add_edge("simulate", END)
+graph.add_edge("write_to_graph", END)
 
-orchestration_agent = graph.compile(checkpointer=MemorySaver())
+orchestration_agent = graph.compile()

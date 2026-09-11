@@ -1,9 +1,9 @@
 import logfire
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from app.config import config
-from  services.Rag.embedding.embeddings import embedding_query
 
+from app.config import config
+from services.Rag.embedding.embeddings import embedding_query
 
 # Initialize Qdrant Client
 client = QdrantClient(
@@ -11,7 +11,7 @@ client = QdrantClient(
     api_key=config.QDRANT_API_KEY
 )
 
-def search_enterprise_knowledge(query: str, limit: int = 8, seed_id: str = None, entity_id: str = None):
+def search_enterprise_knowledge(query: str, limit: int = 8, seed_id: str | None = None, entity_id: str | None = None):
     """
     Performs a high-precision search in the enterprise knowledge base.
 
@@ -59,3 +59,36 @@ def search_enterprise_knowledge(query: str, limit: int = 8, seed_id: str = None,
     except Exception as e:
         logfire.error(f" Qdrant Search Failed: {e}")
         return []
+
+
+def fetch_chunks_by_ids(seed_id: str, chunk_ids: list[str]) -> list[dict]:
+    """Fetch specific chunks by their chunk_id, scoped to one seed.
+
+    This is the Neo4j -> Qdrant half of the bridge. When graph expansion finds
+    a neighbor entity, that entity carries source_chunk_ids; this turns those
+    ids back into the actual text.
+
+    NOTE: a point's Qdrant id is the deterministic uuid5 you built in
+    store_context, which is NOT the same string as chunk_id. So you cannot
+    retrieve by point id directly unless you keep that mapping. The simple
+    route is a scroll with a Filter on the payload field chunk_id, using
+    MatchAny for the list.
+
+    TODO (you): implement with client.scroll. Read the qdrant_client docs for
+    Filter / FieldCondition / MatchAny, or look at the filter in
+    search_enterprise_knowledge above for the pattern.
+    """
+    raise NotImplementedError("Implement fetch_chunks_by_ids.")
+
+
+def fetch_chunks_by_entity(seed_id: str, entity_id: str) -> list[dict]:
+    """Every chunk whose payload lists this entity_id, scoped to one seed.
+
+    This is the Qdrant -> Neo4j direction, and it only works if store_context
+    (or a later step) wrote entity_ids into the chunk payloads. Used to answer
+    "show me everything that mentions this entity".
+
+    TODO (you): same scroll pattern as fetch_chunks_by_ids, but matching on
+    the entity_ids payload field.
+    """
+    raise NotImplementedError("Implement fetch_chunks_by_entity.")

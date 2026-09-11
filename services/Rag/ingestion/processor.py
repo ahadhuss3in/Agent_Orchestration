@@ -85,6 +85,11 @@ def process_file(file_path:str, filename:str, sourcetype:str, seed_id:str=None, 
                 embeddings = embedded_texts(chunks)
                 points=[
                     models.PointStruct(
+                        # TODO(idempotency): uuid4 makes every run a brand new
+                        # point, so re-ingesting the same file duplicates it.
+                        # For seed ingestion you build your own ids in
+                        # store_context.py with uuid5(seed_id:source:index).
+                        # This enterprise path is left as-is for now.
                         id=str(uuid.uuid4()),
                         vector=vector,
                         payload={

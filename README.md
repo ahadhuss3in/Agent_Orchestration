@@ -17,12 +17,16 @@ twice. 👉 **visit: [aisimulation.site](https://aisimulation.site)**
 
 ## What this is
 
-An orchestration engine: feed it a seed (a real event or a made-up one), it
-extracts the entities and relationships into a Neo4j knowledge graph, a human
-picks which entities get promoted into autonomous agents, those agents run
-through several rounds of simulated interaction, and afterward a human can
-open a direct 1:1 chat with any one of them. The `frontend/` folder is the
-marketing site for this pipeline; the actual engine lives under `services/`.
+A knowledge-base engine. Feed it a seed PDF (a real event or a made-up one).
+It extracts the text, optionally pulls live real-world articles, chunks and
+stores that context in Qdrant, extracts the entities and relationships into a
+per-seed Neo4j graph, and bridges the two stores by id. Graph RAG retrieval on
+top of that knowledge base is the next milestone. The `frontend/` folder is the
+marketing site; the actual engine lives under `services/`.
+
+**Status: the pipeline is scaffolded, not implemented.** The node functions
+raise `NotImplementedError` on purpose while they are being written by hand,
+with guiding comments in each file.
 
 ## Project layout
 
@@ -30,8 +34,9 @@ marketing site for this pipeline; the actual engine lives under `services/`.
 AI-Engine/
   app/               shared settings (reads .env)
   services/
-    Orchestration/    seed intake, graph writes, agent promotion, simulation loop
-    Rag/               retrieval-augmented generation backbone the agents run on
+    Orchestration/    the pipeline: intake -> fetch -> store -> extract -> graph
+    Rag/              Qdrant ingestion + embeddings + retrieval primitives
+    MCP/              Tavily web-search MCP server + client
   frontend/           Next.js marketing site ("Pantheon")
   docs/               living project docs
 ```
@@ -60,13 +65,15 @@ NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD
 EMBEDDING_PROVIDER   (gemini, or custom — see CUSTOM_EMBEDDING_* if so)
 ```
 
-Run the orchestration API (seed intake, graph, agents, simulation):
+Run the knowledge-base pipeline API (PDF upload):
 
 ```bash
 uv run uvicorn services.Orchestration.main:app --reload
+# then POST a PDF to http://localhost:8000/seed
 ```
 
-Run the RAG service on its own (the retrieval/chat backbone the agents reuse):
+Run the RAG service (health endpoint only for now; retrieval is not exposed
+over HTTP until Graph RAG is built):
 
 ```bash
 uv run uvicorn services.Rag.main:app --reload

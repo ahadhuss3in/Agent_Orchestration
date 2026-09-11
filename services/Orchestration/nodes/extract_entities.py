@@ -1,9 +1,89 @@
-import re
+"""
+extract_entities: turn stored context into a graph of entities and the
+relationships between them.
 
-import logfire
-from langchain_groq import ChatGroq
-from pydantic import BaseModel, Field
+WHY THIS NODE EXISTS
+--------------------
+store_context produced raw text chunks. Raw text answers "what was written".
+A graph answers "who is involved, and how are they connected", which is the
+question Graph RAG actually needs multi-hop reasoning over.
+
+WHAT THIS NODE OWNS
+-------------------
+  candidate_entities    list of entity dicts. Suggested shape:
+                          {
+                            "entity_id": "seed-abc:person-jane-doe",
+                            "name": "Jane Doe",
+                            "type": "Person",
+                            "description": "...",
+                            "role_in_seed": "...",
+                            "source_chunk_ids": ["seed-abc:seed.pdf:0", ...],
+                          }
+  relationships         list of relationship dicts:
+                          {
+                            "source_id": "seed-abc:person-jane-doe",
+                            "target_id": "seed-abc:org-acme",
+                            "type": "WORKS_FOR",
+                            "description": "...",
+                            "source_chunk_ids": [...],
+                          }
+  qualitative_briefing  {threats, key_points, precautions, predictions}
+  phase                 set it to "entities_extracted".
+
+THE MODELS BELOW ARE A STARTING CONTRACT, NOT LAW
+-------------------------------------------------
+They describe what one chunk's extraction looks like coming back from the LLM.
+Adjust them if your design differs, but keep one rule: the LLM returns NAMES
+for relationships. Your code assigns ids. An LLM inventing ids is how you get
+dangling edges that point at nothing.
+
+HOW TO BUILD IT
+---------------
+The old version made ONE call over the whole seed, capped at 25000 characters,
+and `break`-ed when it hit the cap. That silently drops the rest of a long PDF,
+so a 40 page seed can lose most of its entities and you would never know.
+Replace that with map then reduce:
+
+  MAP     for each chunk in state["stored_chunks"]:
+              ask the LLM to extract entities + relationships from THAT chunk
+              alone. Small prompt, well under the model's limit, nothing lost.
+  REDUCE  merge all per-chunk results into one list:
+              - same entity in two chunks = ONE entity, not two
+              - normalize names before comparing (lowercase, strip spaces)
+              - merge their source_chunk_ids so provenance is complete
+              - decide how to merge descriptions when they differ
+
+1. Assign entity_id yourself, per seed, from the normalized name and type:
+       entity_id = f"{seed_id}:{type.lower()}-{slugify(name)}"
+   The seed_id prefix is what keeps two different seeds that both mention
+   "John Smith" from colliding into one Neo4j node. Read the plan note on
+   per-seed vs global entity identity if that is unclear.
+2. Relationships come back by name. After every entity has an id, map
+   source_name/target_name -> source_id/target_id. If the LLM names something
+   it never declared as an entity, decide: drop the edge, or create a stub
+   entity for it. Do not leave a dangling id.
+3. Attach provenance: record which chunk_id(s) each entity and relationship
+   came from. This is what lets a later answer cite its source. The write
+   path will store these as source_chunk_ids on the Neo4j nodes/edges.
+4. Use a real Pydantic schema with the LLM (structured output) so a bad
+   response raises instead of silently returning junk.
+
+THINK ABOUT
+-----------
+- Groq token limits: one call per chunk is more calls but each is small. Is
+  that a good trade for you? It is the difference between losing data and not.
+- Deduplication is the hard part. Two chunks describe "Jane Doe" differently.
+  Keep the longer description, concatenate, or let the LLM pick? Any is fine,
+  just choose deliberately and write down why.
+- The extraction prompt currently mentions Kubernetes/Intel in the planner,
+  that is leftover from the old chatbot and does not belong here.
+"""
+
+import re
 from typing import Literal
+
+from langchain_groq import ChatGroq
+from pydantic import BaseModel
 
 from app.config import config
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
@@ -13,18 +93,14 @@ llm = ChatGroq(api_key=config.GROQ_API_KEY, model=config.MODEL_REASONING)
 
 class ExtractedEntity(BaseModel):
     name: str
-    type: Literal["Person", "Organization", "Location"]
+    type: Literal["Person", "Organization", "Location", "Event", "Entity"]
     description: str
     role_in_seed: str
-    suggested_agent: bool = Field(
-        description="whether this entity seems important enough to be worth "
-        "considering as a simulated agent, a human still decides for real"
-    )
 
 
 class ExtractedRelationship(BaseModel):
-    # by name, not id, the LLM naturally thinks in names, ids get assigned
-    # afterward once every entity has one
+    # by name, not id. The LLM naturally thinks in names, ids are assigned
+    # afterward once every entity has one.
     source_name: str
     target_name: str
     type: str
@@ -40,7 +116,8 @@ class SeedExtraction(BaseModel):
     predictions: list[str]
 
 
-structured_llm = llm.with_structured_output(SeedExtraction)
+# READY WHEN YOU ARE: uncomment this and reach for it inside your map step.
+# structured_llm = llm.with_structured_output(SeedExtraction)
 
 
 def _slugify(text: str) -> str:
@@ -48,79 +125,7 @@ def _slugify(text: str) -> str:
 
 
 def extract_entities(state: OrchestrationState):
-    """
-    One structured LLM call turning the seed (plus any real-world context
-    fetched for it) into candidate entities, relationships, and a
-    qualitative briefing.
-    """
-    with logfire.span("Extracting entities", seed_id=state["seed_id"]):
-        # same truncate-and-warn pattern already used in generate_node,
-        # seed text plus several fetched articles can plausibly get long
-        # enough to hit the same Groq TPM limits discovered there
-        max_context_chars = 25000
-        full_context = state["seed_text"] + "\n\n"
-
-        for article in state.get("fetched_context", []):
-            piece = f"{article['title']}\n{article['content']}\n\n"
-            if len(full_context) + len(piece) < max_context_chars:
-                full_context += piece
-            else:
-                logfire.warning("Context truncated to fit Groq TPM limits.")
-                break
-
-        extraction = structured_llm.invoke(
-            f"""
-            You are analyzing a scenario to prepare it for simulation.
-
-            SCENARIO:
-            {full_context}
-
-            Extract every person, organization, and location involved, the
-            relationships between them, and a qualitative briefing: threats,
-            key points, precautions, and predictions for how this could play
-            out.
-            """
-        )
-
-        # assign stable ids now, don't trust the LLM to invent consistent
-        # unique ids itself
-        name_to_id = {}
-        candidate_entities = []
-        for entity in extraction.entities:
-            entity_id = f"{entity.type.lower()}-{_slugify(entity.name)}"
-            name_to_id[entity.name] = entity_id
-            candidate_entities.append({
-                "entity_id": entity_id,
-                "name": entity.name,
-                "type": entity.type,
-                "description": entity.description,
-                "role_in_seed": entity.role_in_seed,
-                "suggested_agent": entity.suggested_agent,
-            })
-
-        relationships = [
-            {
-                "source_id": name_to_id.get(r.source_name, r.source_name),
-                "target_id": name_to_id.get(r.target_name, r.target_name),
-                "type": r.type,
-                "description": r.description,
-            }
-            for r in extraction.relationships
-        ]
-
-        logfire.info(
-            f"Extracted {len(candidate_entities)} entities and "
-            f"{len(relationships)} relationships"
-        )
-
-        return {
-            "candidate_entities": candidate_entities,
-            "relationships": relationships,
-            "qualitative_briefing": {
-                "threats": extraction.threats,
-                "key_points": extraction.key_points,
-                "precautions": extraction.precautions,
-                "predictions": extraction.predictions,
-            },
-            "phase": "entities_extracted",
-        }
+    raise NotImplementedError(
+        "Implement extract_entities. Read this module's docstring first. Do a "
+        "per-chunk map, then merge. Do not go back to the single truncated call."
+    )
