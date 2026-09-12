@@ -1,31 +1,28 @@
 """
-The Neo4j side of the knowledge base. Everything Cypher lives here so it can
-be tested without running the LangGraph pipeline.
+The Neo4j side of the knowledge base. All Cypher lives here so it can be
+tested without running the LangGraph pipeline.
 
-PER-SEED MODEL (the decision we agreed on)
-------------------------------------------
-Two different seeds that both mention "John Smith" must NOT collapse into one
-node. So every entity_id is prefixed with the seed_id:
+PER-SEED MODEL
+--------------
+Two different seeds that both mention "John Smith" are kept apart by giving
+every entity a seed-prefixed id (see ids.entity_id):
 
-    entity_id = f"{seed_id}:{type.lower()}-{slugify(name)}"
+    "seed-a:person-john-smith"  !=  "seed-b:person-john-smith"
 
-Given that, the schema is:
+Schema:
 
     (:Seed {seed_id, text})
     (:Person|Organization|Location|Event|Entity {
         entity_id, name, description, role_in_seed, seed_id,
-        source_chunk_ids: [...]          # provenance back into Qdrant
+        source_chunk_ids          # provenance back into Qdrant
     })
     (:Entity)-[:PARTICIPATED_IN]->(:Seed)
     (:EntityA)-[:<SANITIZED_TYPE> {description, source_chunk_ids}]->(:EntityB)
-
-Saying it again because it matters: the seed prefix is the whole reason the
-per-seed model is collision-free. If you drop it, you silently move to the
-global model and inherit the disambiguation problem.
 """
 
 import re
 
+import logfire
 from neo4j import GraphDatabase
 
 from app.config import config
@@ -37,16 +34,16 @@ driver = GraphDatabase.driver(
 
 
 def _sanitize_relationship_type(raw_type: str) -> str:
-    """Cypher relationship types can't be parameterized like values can,
-    they get written directly into the query text, and can only contain
-    safe identifier characters. The LLM's relationship type is free text,
-    so it gets cleaned up here before ever touching a query string, this
-    is what stops a stray character in extracted text from being able to
-    do anything to the database.
+    """Cypher relationship types cannot be parameterized like values can.
+    They get written straight into the query text and may only contain safe
+    identifier characters. The LLM's relationship type is free text, so it is
+    cleaned here before ever touching a query string. This is what stops a
+    stray character in extracted text from being able to do anything to the
+    database.
 
-    KEEP THIS. Do not inline relationship types into a query without it.
-    Values ($name, $entity_id) are parameterized and safe; labels and
-    relationship types cannot be, so they are the one injection surface here.
+    KEEP THIS. Property values ($name, $entity_id) are parameterized and safe.
+    Labels and relationship types cannot be, so they are the one injection
+    surface in this file.
     """
     cleaned = re.sub(r"[^A-Za-z0-9_]+", "_", raw_type).strip("_").upper()
     return cleaned or "RELATED_TO"
@@ -60,62 +57,113 @@ def write_entities(
 ):
     """Write one seed's entities and relationships into Neo4j.
 
-    HOW TO BUILD IT
-    ---------------
-    1. MERGE the Seed node first, so entity writes have something to attach to:
-           MERGE (s:Seed {entity_id: $seed_id}) SET s.text = $seed_text
-    2. For every entity, MERGE on entity_id. MERGE means "match or create", so
-       running this twice updates the same node instead of duplicating it. That
-       idempotency is the entire reason write_to_graph can be re-run safely.
-       The label ({type}) comes from a Pydantic Literal, so it is one of a
-       fixed set and safe to interpolate. Still, feel the difference: the
-       label is f-string interpolated, the properties use $parameters.
-    3. Link entity to seed: MERGE (e)-[:PARTICIPATED_IN]->(s).
-    4. For every relationship, run _sanitize_relationship_type(rel["type"])
-       BEFORE it touches the query string, then MERGE (a)-[r:TYPE]->(b) where
-       a and b are matched by source_id/target_id. Decide what to do when one
-       endpoint does not exist (skip it, or create a stub) and handle it.
-    5. If you stored provenance, set source_chunk_ids on both nodes and edges.
-
-    READ YOUR OWN CYPHER CAREFULLY: MATCH finds nothing quietly, it does not
-    error. A typo in a property name gives you an empty result, not a crash,
-    which is the kind of bug that survives until you wonder why the graph is
-    empty. Verify counts after writing.
+    Everything uses MERGE, keyed on entity_id, never CREATE. MERGE means
+    "match this, or create it if missing", so writing the same seed twice
+    updates the same nodes instead of duplicating them.
     """
-    raise NotImplementedError(
-        "Implement write_entities. Read this docstring first. Keep every property "
-        "as a $parameter and every relationship type through _sanitize."
-    )
+    with logfire.span("Writing entities to Neo4j", seed_id=seed_id):
+        with driver.session() as session:
+            # 1. The Seed node. Entities attach to it, so it must exist first.
+            session.run(
+                "MERGE (s:Seed {entity_id: $seed_id}) SET s.text = $seed_text",
+                seed_id=seed_id,
+                seed_text=seed_text,
+            )
+
+            # 2. Entity nodes.
+            for entity in entities:
+                # The label is f-string interpolated, so it MUST be a fixed
+                # safe value. It is, because `type` comes from a Pydantic
+                # Literal with five allowed strings. Property values use
+                # $parameters and are always safe.
+                label = entity["type"]
+                session.run(
+                    f"""
+                    MERGE (e:{label} {{entity_id: $entity_id}})
+                    SET e.name = $name,
+                        e.description = $description,
+                        e.role_in_seed = $role_in_seed,
+                        e.seed_id = $seed_id,
+                        e.source_chunk_ids = $source_chunk_ids
+                    WITH e
+                    MATCH (s:Seed {{entity_id: $seed_id}})
+                    MERGE (e)-[:PARTICIPATED_IN]->(s)
+                    """,
+                    entity_id=entity["entity_id"],
+                    name=entity["name"],
+                    description=entity["description"],
+                    role_in_seed=entity["role_in_seed"],
+                    seed_id=seed_id,
+                    source_chunk_ids=entity.get("source_chunk_ids", []),
+                )
+
+            # 3. Relationships between entities.
+            for rel in relationships:
+                # Sanitize BEFORE the type touches the query string.
+                rel_type = _sanitize_relationship_type(rel["type"])
+                session.run(
+                    f"""
+                    MATCH (a {{entity_id: $source_id}})
+                    MATCH (b {{entity_id: $target_id}})
+                    MERGE (a)-[r:{rel_type}]->(b)
+                    SET r.description = $description,
+                        r.source_chunk_ids = $source_chunk_ids
+                    """,
+                    source_id=rel["source_id"],
+                    target_id=rel["target_id"],
+                    description=rel["description"],
+                    source_chunk_ids=rel.get("source_chunk_ids", []),
+                )
+
+        logfire.info(
+            f"Wrote {len(entities)} entities and {len(relationships)} "
+            f"relationships to Neo4j for seed {seed_id}"
+        )
 
 
 def get_relationships(entity_id: str) -> list[dict]:
     """Every relationship touching one entity, in either direction, excluding
-    the structural PARTICIPATED_IN edge to the Seed node, that is bookkeeping,
-    not a fact about the scenario.
+    the structural PARTICIPATED_IN edge to the Seed node (bookkeeping, not a
+    fact about the scenario).
 
-    Returns one dict per relationship. Suggested fields: rel_type, other_id,
-    other_name, description, outgoing (True if this entity is the source).
-
-    This is the read side Graph RAG will call: vector search finds an entity,
-    then this walks one hop out to its neighbors. Build it now so the shape is
-    ready, even though retrieval comes later.
+    This is the read side Graph RAG calls: vector search finds an entity, then
+    this walks one hop out to its neighbors. `outgoing` says which way the
+    arrow points relative to the entity we asked about.
     """
-    raise NotImplementedError(
-        "Implement get_relationships. Read this docstring first."
-    )
+    with driver.session() as session:
+        result = session.run(
+            """
+            MATCH (e {entity_id: $entity_id})-[r]-(other)
+            WHERE NOT other:Seed
+            RETURN type(r) AS rel_type,
+                   other.entity_id AS other_id,
+                   other.name AS other_name,
+                   r.description AS description,
+                   r.source_chunk_ids AS source_chunk_ids,
+                   startNode(r).entity_id = $entity_id AS outgoing
+            """,
+            entity_id=entity_id,
+        )
+        return [dict(record) for record in result]
 
 
 def format_relationships(entity_id: str) -> str:
-    """Turn get_relationships() into a plain text block ready to drop into an
-    LLM prompt, e.g.:
+    """Turn get_relationships() into a text block ready to drop into a prompt,
+    e.g.:
         - WORKS_FOR -> Acme Corp: Jane is the CFO of Acme.
         - LIVES_IN <- Berlin: Berlin is where Jane was born.
-
-    Used by Graph RAG when it feeds a graph neighborhood to the model.
     """
-    raise NotImplementedError(
-        "Implement format_relationships. Read this docstring first."
-    )
+    relationships = get_relationships(entity_id)
+    if not relationships:
+        return "No known relationships."
+
+    lines = []
+    for rel in relationships:
+        if rel["outgoing"]:
+            lines.append(f"- {rel['rel_type']} -> {rel['other_name']}: {rel['description']}")
+        else:
+            lines.append(f"- {rel['other_name']} -> {rel['rel_type']} -> you: {rel['description']}")
+    return "\n".join(lines)
 
 
 def count_nodes_for_seed(seed_id: str) -> int:

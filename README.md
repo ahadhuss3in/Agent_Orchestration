@@ -24,9 +24,10 @@ per-seed Neo4j graph, and bridges the two stores by id. Graph RAG retrieval on
 top of that knowledge base is the next milestone. The `frontend/` folder is the
 marketing site; the actual engine lives under `services/`.
 
-**Status: the pipeline is scaffolded, not implemented.** The node functions
-raise `NotImplementedError` on purpose while they are being written by hand,
-with guiding comments in each file.
+**Status: the knowledge-base pipeline is implemented.** Upload a seed PDF and
+it extracts text, optionally pulls live articles, stores chunked context in
+Qdrant, extracts entities and relationships into a per-seed Neo4j graph, and
+bridges the two by id. Graph RAG retrieval on top is the next milestone.
 
 ## Project layout
 

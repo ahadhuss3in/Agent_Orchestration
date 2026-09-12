@@ -1,87 +1,148 @@
 """
-store_context: turn the seed's raw text (and any fetched articles) into
-searchable vectors, and persist them. THIS IS THE MISSING STEP.
-
-WHY THIS NODE EXISTS
---------------------
-Without it the pipeline is a leak. extract_entities reads the seed text out
-of state, and then the run ends and the run's memory is gone. Nothing was ever
-written to Qdrant, so later retrieval filtered by this seed_id finds zero
-chunks. Every other node depends on this one having happened first.
-
-It also decides the two ids the whole knowledge base is stitched together with:
-  chunk_id     stable identity for one chunk, so a re-run updates it
-  entity_ids   left empty here, filled after extraction (see THINK ABOUT)
-
-WHAT THIS NODE OWNS
--------------------
-  stored_chunks  one dict per chunk written to Qdrant. Suggested shape:
-                   {
-                     "chunk_id": "seed-abc:seed.pdf:0",
-                     "source": "seed.pdf",
-                     "source_type": "seed" | "web",
-                     "text": "...",
-                     "chunk_index": 0,
-                     "chunk_count": 12,
-                   }
-                 extract_entities uses this list to attach provenance
-                 (source_chunk_ids) to the entities it finds.
-  phase          set it to "context_stored".
-
-HOW TO BUILD IT
----------------
-There are two sources to store, and they are stored the same way:
-  a) state["seed_text"]                    -> one source
-  b) state["fetched_context"]              -> one source per article
-
-1. Chunking. Do not write a chunker, one exists:
-       from services.Rag.ingestion.chuncking.splitter import chunk_text
-   Pick a chunk size with get_safe_chunk_size() from the embeddings module so
-   the chunk fits the active embedding model. Read both first.
-
-2. Embedding. Also reused, not rewritten:
-       from services.Rag.embedding.embeddings import embedded_texts
-   embedded_texts(list_of_strings) -> list_of_vectors, in the same order.
-
-3. Writing. Get a Qdrant client (services/Rag/retrieval/qdrant_service.py and
-   services/Rag/ingestion/processor.py both show how), and upsert PointStruct
-   objects with a payload of:
-       text, source, source_type, seed_id, chunk_id, chunk_index,
-       chunk_count, entity_ids (start as [])
-   The collection must exist before you write. processor.run_all_ingestion
-   shows the create-if-missing code, including the correct vector dimension.
-   Read it instead of guessing the dimension.
-
-4. The critical detail, deterministic ids. A PointStruct id must be a UUID or
-   an int. If you use uuid.uuid4() (what processor.py:88 does today) every run
-   gets new ids, so upsert cannot match existing points and re-running
-   duplicates everything. Use a stable id derived from content instead, e.g.
-   uuid.uuid5(NAMESPACE, f"{seed_id}:{source}:{chunk_index}"). Same input,
-   same id, so upsert overwrites. Decide your namespace once and keep it.
-
-5. Return state["stored_chunks"] so later nodes can attach provenance. Whatever
-   you keep out of here you cannot recover inside extract_entities.
-
-THINK ABOUT
------------
-- Order: you store chunks, then extract entities. But entity_ids can only be
-  known after extraction. So they cannot be filled here. That leaves a choice:
-  either extract_entities updates the Qdrant payloads afterwards with
-  qdrant_client.set_payload, or the Qdrant -> Neo4j direction of the bridge
-  does not exist and only Neo4j -> Qdrant does. Whichever you pick, the
-  pipeline must end with both directions bridged or Graph RAG cannot expand a
-  vector hit into a graph neighborhood.
-- Web articles need a source_type of "web" and should keep their url. The PDF
-  is source_type "seed". extract_entities will not care, but citations will.
-- What is the chunk_id for a web article where there is no filename? You still
-  need it unique within the seed, e.g. use the url.
+store_context: chunk the raw context, embed it, and persist it to Qdrant.
 """
 
+import logfire
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+
+from app.config import config
+from services.Orchestration.ids import chunk_id as make_chunk_id
+from services.Orchestration.ids import point_id
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
+from services.Rag.embedding.embeddings import (
+    embedded_texts,
+    get_embedding_dim,
+    get_safe_chunk_size,
+)
+from services.Rag.ingestion.chuncking.splitter import chunk_text
+
+
+def _get_client() -> QdrantClient:
+    """One shared connection to Qdrant Cloud."""
+    return QdrantClient(
+        url=config.QDRANT_CLUSTER_ENDPOINT,
+        api_key=config.QDRANT_API_KEY,
+    )
+
+
+def _ensure_collection(client: QdrantClient) -> None:
+    """Create the collection if it does not exist yet.
+    """
+    if client.collection_exists(config.QDRANT_COLLECTION):
+        return
+    dim = get_embedding_dim()
+    client.create_collection(
+        collection_name=config.QDRANT_COLLECTION,
+        vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
+    )
+    logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
+
+
+def _sources(state: OrchestrationState) -> list[dict]:
+    """The raw context for this seed, as a list of {source, source_type, text,
+    title, url} dicts. Two kinds can show up:
+      - the seed PDF itself, always
+      - each fetched web article, real seeds only
+    """
+    sources = [
+        {
+            "source": state["seed_source"],
+            "source_type": "seed",
+            "text": state["seed_text"],
+            "title": state["seed_source"],
+            "url": None,
+        }
+    ]
+    for i, article in enumerate(state.get("fetched_context", [])):
+        # source doubles as the chunk_id ingredient, so it must be unique
+        # within the seed. The url is unique; fall back to an index if a
+        # result came back without one.
+        sources.append(
+            {
+                "source": article.get("url") or f"web-{i}",
+                "source_type": "web",
+                "text": article.get("content", ""),
+                "title": article.get("title", ""),
+                "url": article.get("url"),
+            }
+        )
+    return sources
 
 
 def store_context(state: OrchestrationState):
-    raise NotImplementedError(
-        "Implement store_context. Read this module's docstring first. This node "
-        "is the point of the whole pipeline, do not shortcut it."
-    )
+    seed_id = state["seed_id"]
+    client = _get_client()
+    _ensure_collection(client)
+
+    stored_chunks: list[dict] = []
+
+    with logfire.span("Storing seed context", seed_id=seed_id):
+        for src in _sources(state):
+            # Skip empty sources. A web result can legitimately have no
+            # content, and we do not want a chunk of "".
+            if not src["text"].strip():
+                continue
+
+            # chunk_text packs paragraphs up to a size limit. We ask the
+            # embedding module for that limit because it varies per provider
+            # (a stricter model needs smaller chunks). Reusing both functions
+            # is deliberate: the tested chunker and the tested embedder.
+            chunks = chunk_text(src["text"], chunk_size=get_safe_chunk_size())
+            if not chunks:
+                continue
+
+            # embedded_texts returns one vector per chunk, in the same order.
+            vectors = embedded_texts(chunks)
+
+            points = []
+            for index, (text, vector) in enumerate(zip(chunks, vectors)):
+                cid = make_chunk_id(seed_id, src["source"], index)
+
+                # point_id is a deterministic UUIDv5 of cid. This is the
+                # idempotency fix: re-running the same seed produces the same
+                # point ids, so upsert overwrites instead of duplicating.
+                points.append(
+                    models.PointStruct(
+                        id=point_id(cid),
+                        vector=vector,
+                        payload={
+                            "text": text,
+                            "source": src["source"],
+                            "source_type": src["source_type"],
+                            "seed_id": seed_id,
+                            "chunk_id": cid,
+                            "chunk_index": index,
+                            "chunk_count": len(chunks),
+                            "title": src["title"],
+                            "url": src["url"],
+                            # filled by extract_entities later
+                            "entity_ids": [],
+                        },
+                    )
+                )
+
+                # Keep a plain copy in state. extract_entities reads this to
+                # attach source_chunk_ids to the entities it finds. If we do
+                # not return these, provenance is impossible.
+                stored_chunks.append(
+                    {
+                        "chunk_id": cid,
+                        "source": src["source"],
+                        "source_type": src["source_type"],
+                        "text": text,
+                        "chunk_index": index,
+                        "chunk_count": len(chunks),
+                    }
+                )
+
+            client.upsert(collection_name=config.QDRANT_COLLECTION, points=points)
+            logfire.info(
+                f"Stored {len(points)} chunks from {src['source_type']} "
+                f"source '{src['source']}'"
+            )
+
+    return {
+        "stored_chunks": stored_chunks,
+        "phase": "context_stored",
+    }
