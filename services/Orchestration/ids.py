@@ -19,6 +19,7 @@ entity_id   a stable identity for one entity, scoped to one seed.
 
 import re
 import uuid
+
 NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "ai-engine/knowledge-base")
 
 

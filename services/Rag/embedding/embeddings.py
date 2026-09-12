@@ -1,7 +1,9 @@
 import time
+
 import logfire
 import requests
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
 from app.config import config
 
 BATCH_SIZE = 50
@@ -28,7 +30,7 @@ def _probe_gemini():
         model.embed_query("test")
         logfire.info(f"Gemini Embeddings are ready. Model used {model.model}")
         return model
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 (a failed probe falls back, not fatal)
         logfire.warning(f"Gemini probe failed : {e}. Will use the sentence-transfromer as fallback model")
         return None
 
@@ -81,7 +83,7 @@ def _probe_custom():
             dim=_custom_dim,
         )
         return config.CUSTOM_EMBEDDING_MODEL
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 (a failed probe falls back, not fatal)
         logfire.warning(f"Custom embedding probe failed : {e}. Will use the sentence-transfromer as fallback model")
         return None
 
@@ -100,18 +102,24 @@ def _init():
     # config.EMBEDDING_PROVIDER picks which one to try first. anything
     # other than "gemini" is treated as "custom", driven entirely by the
     # CUSTOM_EMBEDDING_* settings, not hardcoded to any one provider.
-    if config.EMBEDDING_PROVIDER == "gemini":
-        active = _probe_gemini()
-        if active:
-            _active_model = active
-            _model_type = "gemini"
-            return
-    else:
-        active = _probe_custom()
-        if active:
-            _active_model = active
-            _model_type = "custom"
-            return
+    # The probe makes a real network call, so it gets its own span.
+    with logfire.span(
+        "init embeddings",
+        provider=config.EMBEDDING_PROVIDER,
+        custom_model=config.CUSTOM_EMBEDDING_MODEL,
+    ):
+        if config.EMBEDDING_PROVIDER == "gemini":
+            active = _probe_gemini()
+            if active:
+                _active_model = active
+                _model_type = "gemini"
+                return
+        else:
+            active = _probe_custom()
+            if active:
+                _active_model = active
+                _model_type = "custom"
+                return
 
     _active_model = load_fallback()
     _model_type = "Sentence-Transformer-fallback"
@@ -207,8 +215,9 @@ def embedding_query(query:str) -> list[float]:
 def embedded_texts(texts:list[str])-> list[list[float]]: 
     _init()
     all_embeddings: list[list[float]] = []
-    for i in range(0,len(texts), BATCH_SIZE):
-        batch = texts[i : i + BATCH_SIZE]
-        with logfire.span("Embedded Batch", model=_model_type, start = i, size=len(batch)):
-            all_embeddings.extend(embedding_batch(batch))
+    with logfire.span("embed texts", model=_model_type, total=len(texts), batch_size=BATCH_SIZE):
+        for i in range(0,len(texts), BATCH_SIZE):
+            batch = texts[i : i + BATCH_SIZE]
+            with logfire.span("Embedded Batch", model=_model_type, start = i, size=len(batch)):
+                all_embeddings.extend(embedding_batch(batch))
     return all_embeddings

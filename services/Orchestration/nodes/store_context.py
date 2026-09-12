@@ -31,12 +31,13 @@ def _ensure_collection(client: QdrantClient) -> None:
     """
     if client.collection_exists(config.QDRANT_COLLECTION):
         return
-    dim = get_embedding_dim()
-    client.create_collection(
-        collection_name=config.QDRANT_COLLECTION,
-        vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
-    )
-    logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
+    with logfire.span("ensure qdrant collection", collection=config.QDRANT_COLLECTION):
+        dim = get_embedding_dim()
+        client.create_collection(
+            collection_name=config.QDRANT_COLLECTION,
+            vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
+        )
+        logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
 
 
 def _sources(state: OrchestrationState) -> list[dict]:
@@ -88,12 +89,22 @@ def store_context(state: OrchestrationState):
             # embedding module for that limit because it varies per provider
             # (a stricter model needs smaller chunks). Reusing both functions
             # is deliberate: the tested chunker and the tested embedder.
-            chunks = chunk_text(src["text"], chunk_size=get_safe_chunk_size())
+            with logfire.span(
+                "chunk source",
+                source=src["source"],
+                source_type=src["source_type"],
+                chars=len(src["text"]),
+            ):
+                chunks = chunk_text(src["text"], chunk_size=get_safe_chunk_size())
             if not chunks:
                 continue
+            logfire.info("chunked source", source=src["source"], chunks=len(chunks))
 
             # embedded_texts returns one vector per chunk, in the same order.
-            vectors = embedded_texts(chunks)
+            # This is often the slowest step for a big seed, so it is its own
+            # span with the chunk count attached.
+            with logfire.span("embed chunks", count=len(chunks), source=src["source"]):
+                vectors = embedded_texts(chunks)
 
             points = []
             for index, (text, vector) in enumerate(zip(chunks, vectors)):
@@ -136,12 +147,14 @@ def store_context(state: OrchestrationState):
                     }
                 )
 
-            client.upsert(collection_name=config.QDRANT_COLLECTION, points=points)
+            with logfire.span("upsert points", count=len(points), source=src["source"]):
+                client.upsert(collection_name=config.QDRANT_COLLECTION, points=points)
             logfire.info(
                 f"Stored {len(points)} chunks from {src['source_type']} "
                 f"source '{src['source']}'"
             )
 
+    logfire.info("context stored", total_chunks=len(stored_chunks))
     return {
         "stored_chunks": stored_chunks,
         "phase": "context_stored",

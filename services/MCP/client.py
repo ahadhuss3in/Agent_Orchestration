@@ -6,6 +6,7 @@ way it was already proven to work during M13's verification.
 
 import json
 
+import logfire
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -22,8 +23,12 @@ async def call_tavily_tool(tool_name: str, arguments: dict) -> list[dict]:
     Each result comes back over MCP as its own text block containing one
     JSON object, confirmed by inspecting a real response, not assumed.
     """
-    async with stdio_client(TAVILY_SERVER_PARAMS) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(tool_name, arguments)
-            return [json.loads(block.text) for block in result.content]
+    # Spawning a subprocess and doing the MCP handshake is not free, so this
+    # gets a span. It is also where a run would hang if the server never
+    # responds, which the timeout in fetch_context guards against.
+    with logfire.span("mcp tavily call", tool=tool_name):
+        async with stdio_client(TAVILY_SERVER_PARAMS) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, arguments)
+                return [json.loads(block.text) for block in result.content]

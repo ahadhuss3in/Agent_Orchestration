@@ -1,4 +1,5 @@
-import os 
+import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,6 +21,12 @@ class config:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     CUSTOM_EMBEDDING_MAX_CHARS = int(os.getenv("CUSTOM_EMBEDDING_MAX_CHARS", "900"))
     MODEL_REASONING="openai/gpt-oss-120b"
+
+    # LLM used for extraction. DeepSeek is OpenAI-compatible, so the client is
+    # ChatOpenAI pointed at this base URL. Swapping provider is an .env change.
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+    DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
 
     NEO4J_URI = os.getenv("NEO4J_URI")
     NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")

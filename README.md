@@ -97,6 +97,22 @@ npm run build   # production build
 npm run lint    # eslint
 ```
 
+## Testing the pipeline with the console
+
+`frontend2/` is a separate, lightweight Vite + React app for driving the API:
+upload a PDF, run the pipeline, inspect the extracted graph, and delete the
+seed when done. It is not the marketing site.
+
+```bash
+cd frontend2
+npm install
+npm run dev          # http://localhost:5173
+```
+
+Run the API alongside it (`uvicorn ... --port 8000`); CORS is already allowed
+for `:5173`. `DELETE /seed/{seed_id}` removes that seed's data from both stores.
+Note the API has no auth on that route, so keep it local.
+
 ## Docs
 
 `docs/KNOWLEDGE_GRAPH.md` and `docs/plan.md` track the architecture and

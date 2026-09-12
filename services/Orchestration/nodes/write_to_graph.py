@@ -13,13 +13,26 @@ from services.Orchestration.StateGraph.OrchestrationState import OrchestrationSt
 
 
 def write_to_graph(state: OrchestrationState):
+    entities = state["candidate_entities"]
+    relationships = state["relationships"]
+
     # Let a Neo4j failure raise. Swallowing it would make the API report
     # success while the graph is empty, which is the worst possible outcome.
-    with logfire.span("Writing to knowledge graph", seed_id=state["seed_id"]):
+    with logfire.span(
+        "Writing to knowledge graph",
+        seed_id=state["seed_id"],
+        entities=len(entities),
+        relationships=len(relationships),
+    ):
         write_entities(
             seed_id=state["seed_id"],
             seed_text=state["seed_text"],
-            entities=state["candidate_entities"],
-            relationships=state["relationships"],
+            entities=entities,
+            relationships=relationships,
+        )
+        logfire.info(
+            "graph written",
+            entities=len(entities),
+            relationships=len(relationships),
         )
         return {"phase": "written_to_graph"}

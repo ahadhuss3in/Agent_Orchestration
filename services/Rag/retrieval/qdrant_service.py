@@ -56,7 +56,7 @@ def search_enterprise_knowledge(query: str, limit: int = 8, seed_id: str | None 
             })
         
         return results
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 (search failure returns [] on purpose)
         logfire.error(f" Qdrant Search Failed: {e}")
         return []
 
@@ -92,3 +92,26 @@ def fetch_chunks_by_entity(seed_id: str, entity_id: str) -> list[dict]:
     the entity_ids payload field.
     """
     raise NotImplementedError("Implement fetch_chunks_by_entity.")
+
+
+def delete_seed_points(seed_id: str) -> int:
+    """Delete every point for one seed, and return how many were removed.
+
+    Counts first so the caller can report a real number, then deletes with a
+    filter selector on the seed_id payload field. Used by the dev cleanup
+    endpoint and by tests.
+    """
+    seed_filter = models.Filter(
+        must=[models.FieldCondition(key="seed_id", match=models.MatchValue(value=seed_id))]
+    )
+    count = client.count(
+        collection_name=config.QDRANT_COLLECTION,
+        count_filter=seed_filter,
+        exact=True,
+    ).count
+    client.delete(
+        collection_name=config.QDRANT_COLLECTION,
+        points_selector=models.FilterSelector(filter=seed_filter),
+    )
+    logfire.info(f"Deleted {count} Qdrant points for seed {seed_id}")
+    return count

@@ -64,56 +64,59 @@ def write_entities(
     with logfire.span("Writing entities to Neo4j", seed_id=seed_id):
         with driver.session() as session:
             # 1. The Seed node. Entities attach to it, so it must exist first.
-            session.run(
-                "MERGE (s:Seed {entity_id: $seed_id}) SET s.text = $seed_text",
-                seed_id=seed_id,
-                seed_text=seed_text,
-            )
+            with logfire.span("merge seed node"):
+                session.run(
+                    "MERGE (s:Seed {entity_id: $seed_id}) SET s.text = $seed_text",
+                    seed_id=seed_id,
+                    seed_text=seed_text,
+                )
 
             # 2. Entity nodes.
-            for entity in entities:
-                # The label is f-string interpolated, so it MUST be a fixed
-                # safe value. It is, because `type` comes from a Pydantic
-                # Literal with five allowed strings. Property values use
-                # $parameters and are always safe.
-                label = entity["type"]
-                session.run(
-                    f"""
-                    MERGE (e:{label} {{entity_id: $entity_id}})
-                    SET e.name = $name,
-                        e.description = $description,
-                        e.role_in_seed = $role_in_seed,
-                        e.seed_id = $seed_id,
-                        e.source_chunk_ids = $source_chunk_ids
-                    WITH e
-                    MATCH (s:Seed {{entity_id: $seed_id}})
-                    MERGE (e)-[:PARTICIPATED_IN]->(s)
-                    """,
-                    entity_id=entity["entity_id"],
-                    name=entity["name"],
-                    description=entity["description"],
-                    role_in_seed=entity["role_in_seed"],
-                    seed_id=seed_id,
-                    source_chunk_ids=entity.get("source_chunk_ids", []),
-                )
+            with logfire.span("merge entity nodes", count=len(entities)):
+                for entity in entities:
+                    # The label is f-string interpolated, so it MUST be a fixed
+                    # safe value. It is, because `type` comes from a Pydantic
+                    # Literal with five allowed strings. Property values use
+                    # $parameters and are always safe.
+                    label = entity["type"]
+                    session.run(
+                        f"""
+                        MERGE (e:{label} {{entity_id: $entity_id}})
+                        SET e.name = $name,
+                            e.description = $description,
+                            e.role_in_seed = $role_in_seed,
+                            e.seed_id = $seed_id,
+                            e.source_chunk_ids = $source_chunk_ids
+                        WITH e
+                        MATCH (s:Seed {{entity_id: $seed_id}})
+                        MERGE (e)-[:PARTICIPATED_IN]->(s)
+                        """,
+                        entity_id=entity["entity_id"],
+                        name=entity["name"],
+                        description=entity["description"],
+                        role_in_seed=entity["role_in_seed"],
+                        seed_id=seed_id,
+                        source_chunk_ids=entity.get("source_chunk_ids", []),
+                    )
 
             # 3. Relationships between entities.
-            for rel in relationships:
-                # Sanitize BEFORE the type touches the query string.
-                rel_type = _sanitize_relationship_type(rel["type"])
-                session.run(
-                    f"""
-                    MATCH (a {{entity_id: $source_id}})
-                    MATCH (b {{entity_id: $target_id}})
-                    MERGE (a)-[r:{rel_type}]->(b)
-                    SET r.description = $description,
-                        r.source_chunk_ids = $source_chunk_ids
-                    """,
-                    source_id=rel["source_id"],
-                    target_id=rel["target_id"],
-                    description=rel["description"],
-                    source_chunk_ids=rel.get("source_chunk_ids", []),
-                )
+            with logfire.span("merge relationships", count=len(relationships)):
+                for rel in relationships:
+                    # Sanitize BEFORE the type touches the query string.
+                    rel_type = _sanitize_relationship_type(rel["type"])
+                    session.run(
+                        f"""
+                        MATCH (a {{entity_id: $source_id}})
+                        MATCH (b {{entity_id: $target_id}})
+                        MERGE (a)-[r:{rel_type}]->(b)
+                        SET r.description = $description,
+                            r.source_chunk_ids = $source_chunk_ids
+                        """,
+                        source_id=rel["source_id"],
+                        target_id=rel["target_id"],
+                        description=rel["description"],
+                        source_chunk_ids=rel.get("source_chunk_ids", []),
+                    )
 
         logfire.info(
             f"Wrote {len(entities)} entities and {len(relationships)} "
@@ -130,7 +133,7 @@ def get_relationships(entity_id: str) -> list[dict]:
     this walks one hop out to its neighbors. `outgoing` says which way the
     arrow points relative to the entity we asked about.
     """
-    with driver.session() as session:
+    with logfire.span("get relationships", entity_id=entity_id), driver.session() as session:
         result = session.run(
             """
             MATCH (e {entity_id: $entity_id})-[r]-(other)

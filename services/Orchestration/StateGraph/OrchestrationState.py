@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 
 class OrchestrationState(TypedDict):
@@ -6,7 +6,7 @@ class OrchestrationState(TypedDict):
     THE JOURNEY OF ONE SEED THROUGH THIS STATE
     ------------------------------------------
     intake_seed        fills seed_id, seed_text, seed_source
-    fetch_context      fills fetched_context          (real seeds only)
+    fetch_context      fills fetched_context          (always runs)
     store_context      fills stored_chunks            (writes to Qdrant)
     extract_entities   fills candidate_entities,
                              relationships,
@@ -30,12 +30,10 @@ class OrchestrationState(TypedDict):
 
     # The raw seed as plain text, produced by intake_seed from the PDF.
     seed_text: str
-    seed_type: Literal["real", "fictional"]
     phase: str
 
-    # Real-world articles fetched via the Tavily MCP tool. Only populated
-    # for seed_type == "real", stays [] for fictional seeds because the
-    # fetch_context node never runs for those.
+    # Real-world articles fetched via the Tavily MCP tool. Every seed pulls
+    # these now, there is no real/fictional branch anymore.
     fetched_context: list[dict]
 
     # Every chunk store_context wrote to Qdrant for this seed. One dict per
