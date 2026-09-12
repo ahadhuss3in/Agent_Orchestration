@@ -1,4 +1,6 @@
+import glob
 import os
+import shutil
 import uuid
 from pathlib import Path
 
@@ -34,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
 from services.Orchestration.graphdb.neo4j_service import delete_seed
+from services.Orchestration.nodes.store_context import PLAINTEXT_DIR, WEB_DIR
 from services.Orchestration.StateGraph.Graph import orchestration_agent
 from services.Rag.retrieval.qdrant_service import delete_seed_points
 
@@ -160,15 +163,34 @@ async def submit_seed(file: UploadFile = File(...)):  # noqa: B008 (FastAPI depe
 
 @app.delete("/seed/{seed_id}")
 def remove_seed(seed_id: str):
-    """Delete one seed's data from both stores.
+    """Delete one seed's data from both stores and from disk.
 
     This is a destructive, unauthenticated dev endpoint for cleaning up test
     runs. Do not expose this API to the public with it enabled. It removes:
       - every Qdrant point whose payload seed_id matches
       - every Neo4j node/edge belonging to the seed
+      - DATA/web/<seed_id>/ and DATA/plaintext/<seed_id>/
+      - the uploaded PDF named <seed_id>_*
     """
     with logfire.span("delete seed", seed_id=seed_id):
         points = delete_seed_points(seed_id)
         delete_seed(seed_id)
-        logfire.info(f"Deleted seed {seed_id}: {points} Qdrant points, Neo4j cleared")
-    return {"seed_id": seed_id, "deleted": {"qdrant_points": points}}
+
+        files_removed = 0
+        for base in (WEB_DIR, PLAINTEXT_DIR):
+            folder = os.path.join(base, seed_id)
+            if os.path.isdir(folder):
+                shutil.rmtree(folder)
+                files_removed += 1
+        for uploaded in glob.glob(os.path.join(UPLOAD_DIR, f"{seed_id}_*")):
+            os.remove(uploaded)
+            files_removed += 1
+
+        logfire.info(
+            f"Deleted seed {seed_id}: {points} Qdrant points, Neo4j cleared, "
+            f"{files_removed} path(s) removed from disk"
+        )
+    return {
+        "seed_id": seed_id,
+        "deleted": {"qdrant_points": points, "paths_removed": files_removed},
+    }

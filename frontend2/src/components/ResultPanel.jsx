@@ -67,7 +67,8 @@ export default function ResultPanel({ result, onDelete }) {
         </button>
         {result.deleted && (
           <span className="muted small">
-            Removed {result.deleted.qdrant_points} Qdrant points and Neo4j nodes.
+            Removed {result.deleted.qdrant_points} Qdrant points, the Neo4j graph,
+            and {result.deleted.paths_removed ?? 0} path(s) from disk.
           </span>
         )}
       </div>

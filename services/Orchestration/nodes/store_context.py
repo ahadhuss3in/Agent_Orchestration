@@ -1,6 +1,30 @@
 """
-store_context: chunk the raw context, embed it, and persist it to Qdrant.
+store_context: load every raw source for a seed from disk, convert it to
+plaintext, persist that plaintext, then chunk, embed, and write to Qdrant.
+
+THE FLOW (seed and web are treated the same way)
+------------------------------------------------
+    raw file on disk (DATA/uploads/*.pdf or DATA/web/<seed_id>/*.txt)
+        -> RAG loader            (pdf/html/office/text) -> plaintext
+        -> DATA/plaintext/<seed_id>/<name>.txt          (persisted)
+        -> RAG loader again      (re-read the stored plaintext)
+        -> RAG chunker           -> chunks
+        -> RAG embeddings        -> vectors
+        -> Qdrant upsert         (the only part RAG does not already do)
+
+Everything through chunking is a function already in the RAG module. The
+upsert is written here because RAG's processor.py uses random point ids and a
+payload that does not carry chunk_id/entity_ids, which the graph bridge needs.
+
+The upsert payload is:
+    text, source, source_type, seed_id, chunk_id, chunk_index,
+    chunk_count, title, url, entity_ids
+entity_ids starts empty and extract_entities fills it in later.
 """
+
+import json
+import os
+from pathlib import Path
 
 import logfire
 from qdrant_client import QdrantClient
@@ -16,10 +40,16 @@ from services.Rag.embedding.embeddings import (
     get_safe_chunk_size,
 )
 from services.Rag.ingestion.chuncking.splitter import chunk_text
+from services.Rag.ingestion.loaders.html_loader import loadhtml
+from services.Rag.ingestion.loaders.office_loader import loadoffice
+from services.Rag.ingestion.loaders.pdf_loader import loadpdf
+from services.Rag.ingestion.loaders.text_loader import loadtext
+
+WEB_DIR = os.path.join("DATA", "web")
+PLAINTEXT_DIR = os.path.join("DATA", "plaintext")
 
 
 def _get_client() -> QdrantClient:
-    """One shared connection to Qdrant Cloud."""
     return QdrantClient(
         url=config.QDRANT_CLUSTER_ENDPOINT,
         api_key=config.QDRANT_API_KEY,
@@ -27,8 +57,7 @@ def _get_client() -> QdrantClient:
 
 
 def _ensure_collection(client: QdrantClient) -> None:
-    """Create the collection if it does not exist yet.
-    """
+    """Create the collection if missing, sized for the active embedder."""
     if client.collection_exists(config.QDRANT_COLLECTION):
         return
     with logfire.span("ensure qdrant collection", collection=config.QDRANT_COLLECTION):
@@ -40,35 +69,67 @@ def _ensure_collection(client: QdrantClient) -> None:
         logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
 
 
-def _sources(state: OrchestrationState) -> list[dict]:
-    """The raw context for this seed, as a list of {source, source_type, text,
-    title, url} dicts. Two kinds can show up:
-      - the seed PDF itself, always
-      - each fetched web article, real seeds only
-    """
-    sources = [
+def _load_plaintext(path: str) -> str:
+    """Reuse the RAG loaders by extension. Returns plaintext."""
+    ext = path.lower().rsplit(".", 1)[-1]
+    if ext == "pdf":
+        return loadpdf(path).text
+    if ext in ("html", "htm"):
+        return loadhtml(path).text
+    if ext in ("docx", "pptx"):
+        return loadoffice(path).text
+    if ext == "txt":
+        return loadtext(path).text
+    raise ValueError(f"unsupported source type: {path}")
+
+
+def _seed_sources(state: OrchestrationState) -> list[dict]:
+    """The uploaded seed PDF as one source, if there is one."""
+    pdf_path = state.get("seed_pdf_path")
+    if not pdf_path or not os.path.exists(pdf_path):
+        return []
+    name = state.get("seed_source") or os.path.basename(pdf_path)
+    return [
         {
-            "source": state["seed_source"],
+            "path": pdf_path,
+            "source": name,
             "source_type": "seed",
-            "text": state["seed_text"],
-            "title": state["seed_source"],
+            "title": name,
             "url": None,
         }
     ]
-    for i, article in enumerate(state.get("fetched_context", [])):
-        # source doubles as the chunk_id ingredient, so it must be unique
-        # within the seed. The url is unique; fall back to an index if a
-        # result came back without one.
+
+
+def _web_sources(seed_id: str) -> list[dict]:
+    """Every raw web document fetch_context wrote, from its manifest."""
+    folder = os.path.join(WEB_DIR, seed_id)
+    manifest_path = os.path.join(folder, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return []
+
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    sources = []
+    for entry in manifest:
+        path = os.path.join(folder, entry["file"])
+        if not os.path.exists(path):
+            continue
         sources.append(
             {
-                "source": article.get("url") or f"web-{i}",
+                "path": path,
+                # source doubles as the chunk_id ingredient and the citation.
+                # The url is stable across reruns; fall back to the file name.
+                "source": entry.get("url") or entry["file"],
                 "source_type": "web",
-                "text": article.get("content", ""),
-                "title": article.get("title", ""),
-                "url": article.get("url"),
+                "title": entry.get("title", ""),
+                "url": entry.get("url"),
             }
         )
     return sources
+
+
+def _plaintext_name(src: dict) -> str:
+    """Plaintext file name for one source. Unique within the seed's folder."""
+    return Path(src["path"]).stem + ".txt"
 
 
 def store_context(state: OrchestrationState):
@@ -76,49 +137,55 @@ def store_context(state: OrchestrationState):
     client = _get_client()
     _ensure_collection(client)
 
+    sources = _seed_sources(state) + _web_sources(seed_id)
+    plaintext_folder = os.path.join(PLAINTEXT_DIR, seed_id)
     stored_chunks: list[dict] = []
 
-    with logfire.span("Storing seed context", seed_id=seed_id):
-        for src in _sources(state):
-            # Skip empty sources. A web result can legitimately have no
-            # content, and we do not want a chunk of "".
-            if not src["text"].strip():
+    with logfire.span("Storing seed context", seed_id=seed_id, sources=len(sources)):
+        for src in sources:
+            # 1. raw file -> plaintext, using the RAG loader for its type.
+            with logfire.span(
+                "load source", source=src["source"], source_type=src["source_type"]
+            ):
+                text = _load_plaintext(src["path"])
+            if not text or not text.strip():
+                logfire.warning(f"source had no text, skipping: {src['path']}")
                 continue
 
-            # chunk_text packs paragraphs up to a size limit. We ask the
-            # embedding module for that limit because it varies per provider
-            # (a stricter model needs smaller chunks). Reusing both functions
-            # is deliberate: the tested chunker and the tested embedder.
+            # 2. persist the plaintext.
+            os.makedirs(plaintext_folder, exist_ok=True)
+            plaintext_path = os.path.join(plaintext_folder, _plaintext_name(src))
+            with logfire.span("write plaintext", path=plaintext_path):
+                Path(plaintext_path).write_text(text, encoding="utf-8")
+
+            # 3. pick it back up and use the stored copy as the source of truth.
+            with logfire.span("read plaintext", path=plaintext_path):
+                text = loadtext(plaintext_path).text
+
+            # 4. chunk.
             with logfire.span(
                 "chunk source",
                 source=src["source"],
-                source_type=src["source_type"],
-                chars=len(src["text"]),
+                chars=len(text),
             ):
-                chunks = chunk_text(src["text"], chunk_size=get_safe_chunk_size())
+                chunks = chunk_text(text, chunk_size=get_safe_chunk_size())
             if not chunks:
                 continue
-            logfire.info("chunked source", source=src["source"], chunks=len(chunks))
 
-            # embedded_texts returns one vector per chunk, in the same order.
-            # This is often the slowest step for a big seed, so it is its own
-            # span with the chunk count attached.
+            # 5. embed.
             with logfire.span("embed chunks", count=len(chunks), source=src["source"]):
                 vectors = embedded_texts(chunks)
 
+            # 6. build points with deterministic ids and the bridge payload.
             points = []
-            for index, (text, vector) in enumerate(zip(chunks, vectors)):
+            for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
                 cid = make_chunk_id(seed_id, src["source"], index)
-
-                # point_id is a deterministic UUIDv5 of cid. This is the
-                # idempotency fix: re-running the same seed produces the same
-                # point ids, so upsert overwrites instead of duplicating.
                 points.append(
                     models.PointStruct(
                         id=point_id(cid),
                         vector=vector,
                         payload={
-                            "text": text,
+                            "text": chunk,
                             "source": src["source"],
                             "source_type": src["source_type"],
                             "seed_id": seed_id,
@@ -132,16 +199,12 @@ def store_context(state: OrchestrationState):
                         },
                     )
                 )
-
-                # Keep a plain copy in state. extract_entities reads this to
-                # attach source_chunk_ids to the entities it finds. If we do
-                # not return these, provenance is impossible.
                 stored_chunks.append(
                     {
                         "chunk_id": cid,
                         "source": src["source"],
                         "source_type": src["source_type"],
-                        "text": text,
+                        "text": chunk,
                         "chunk_index": index,
                         "chunk_count": len(chunks),
                     }
@@ -154,7 +217,7 @@ def store_context(state: OrchestrationState):
                 f"source '{src['source']}'"
             )
 
-    logfire.info("context stored", total_chunks=len(stored_chunks))
+    logfire.info("context stored", total_chunks=len(stored_chunks), sources=len(sources))
     return {
         "stored_chunks": stored_chunks,
         "phase": "context_stored",
