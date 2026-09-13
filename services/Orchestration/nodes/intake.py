@@ -13,53 +13,34 @@ import os
 import uuid
 
 import logfire
+## not needed here for now but keep it here to retrieve it later for when I go for the chunking part 
+from services.Rag.ingestion.chuncking.splitter import chunk_text
+from services.Rag.embedding.embeddings import embedded_texts, get_embedding_dim, get_safe_chunk_size
 
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
 from services.Rag.ingestion.loaders.pdf_loader import loadpdf
 
 
 def intake_seed(state: OrchestrationState):
-    """Read the uploaded PDF and put its text into state as seed_text."""
-    # The API generates seed_id before calling the graph. The fallback lets
-    # someone run the graph directly (script/test) without one.
-    seed_id = state.get("seed_id") or f"seed-{uuid.uuid4().hex[:8]}"
+    """Read the uploaded PDF and put its text into state as doc."""
 
-    with logfire.span("Seed Intake", seed_id=seed_id):
+    with logfire.span("Seed Intake", seed_id=state["seed_id"]):
         pdf_path = state.get("seed_pdf_path")
+        doc = ""
 
-        # seed_text always has a value, so the emptiness check below can never
-        # hit an undefined variable. A caller may also seed raw text directly
-        # instead of a file, in which case the PDF is skipped.
-        seed_text = state.get("seed_text", "")
-        seed_source = state.get("seed_source")
-
-        if pdf_path:
-            # loadpdf returns a LoadedDocument; the loader owns all the
-            # pdfplumber details. We only want .text here. It gets its own span
-            # because PDF parsing time varies a lot by document.
-            with logfire.span("extract pdf text", pdf_path=pdf_path):
+        if not pdf_path: 
+            logfire.warning("No seed found to process. Exiting")
+            # Return a state update indicating a skip or error so the graph doesn't hang
+            return {"phase": "skipped"}
+    
+        with logfire.span("Extracting pdf text", pdf_path=pdf_path):
                 doc = loadpdf(pdf_path)
-            seed_text = doc.text.strip()
-            seed_source = seed_source or os.path.basename(pdf_path)
+                if not doc or not doc.text.strip():
+                     logfire.warning(f"File {pdf_path} has no extractable content, skipping it.")
+                     return
+                logfire.info(f"Seed text ready, {len(doc.text)} chars")     
 
-        seed_source = seed_source or "text"
-
-        # A scanned PDF with no text layer comes back empty. Carrying on would
-        # produce zero chunks and an empty knowledge base, so fail now with a
-        # clear message instead of later with a confusing one.
-        if not seed_text:
-            raise ValueError(
-                f"Seed {seed_id} produced no text. Is {pdf_path} a scanned PDF "
-                f"with no text layer? OCR is not supported."
-            )
-
-        logfire.info(f"Seed text ready, {len(seed_text)} chars")
-
-        # Return ONLY the fields this node changed. LangGraph merges this dict
-        # into the shared state; it does not replace the whole thing.
         return {
-            "seed_id": seed_id,
-            "seed_text": seed_text,
-            "seed_source": seed_source,
+            "seed_text": doc.text,
             "phase": "seed_intake",
         }

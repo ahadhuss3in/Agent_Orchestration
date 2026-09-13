@@ -34,16 +34,7 @@ driver = GraphDatabase.driver(
 
 
 def _sanitize_relationship_type(raw_type: str) -> str:
-    """Cypher relationship types cannot be parameterized like values can.
-    They get written straight into the query text and may only contain safe
-    identifier characters. The LLM's relationship type is free text, so it is
-    cleaned here before ever touching a query string. This is what stops a
-    stray character in extracted text from being able to do anything to the
-    database.
-
-    KEEP THIS. Property values ($name, $entity_id) are parameterized and safe.
-    Labels and relationship types cannot be, so they are the one injection
-    surface in this file.
+    """Cypher relationship types cannot be parameterized like values.
     """
     cleaned = re.sub(r"[^A-Za-z0-9_]+", "_", raw_type).strip("_").upper()
     return cleaned or "RELATED_TO"
