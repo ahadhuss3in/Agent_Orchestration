@@ -20,7 +20,7 @@ def search_recent_news(query: str, max_results: int = 5) -> list[dict]:
     Returns a list of {title, url, content} dicts, the actual article
     snippets, not just links.
     """
-    result = tavily_client.search(query, max_results=max_results, topic="news")
+    result = tavily_client.search(query, max_results=max_results, include_raw_content=True)
     return [
         {"title": r["title"], "url": r["url"], "content": r["content"]}
         for r in result["results"]

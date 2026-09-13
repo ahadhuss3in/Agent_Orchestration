@@ -1,16 +1,7 @@
 """
 intake_seed: give the seed a stable identity and turn its PDF into text.
 
-The two jobs:
-  1. make sure seed_id exists, because every id downstream is built from it
-  2. read the uploaded PDF and put its text into state as seed_text
-
-Nothing here is clever. That is the point: the first node should be the
-simplest one, so when a later node misbehaves you know it is not intake.
 """
-
-import os
-import uuid
 
 import logfire
 ## not needed here for now but keep it here to retrieve it later for when I go for the chunking part 

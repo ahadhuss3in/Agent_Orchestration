@@ -57,7 +57,7 @@ def _persist_articles(seed_id: str, articles: list[dict]) -> int:
                 "url": url,
             }
         )
-
+    ## crete a manifest to keep track of the files and meta data
     Path(os.path.join(folder, "manifest.json")).write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -65,14 +65,13 @@ def _persist_articles(seed_id: str, articles: list[dict]) -> int:
 
 
 async def fetch_context(state: OrchestrationState):
-    seed_id = state["seed_id"]
-    with logfire.span("Fetching real world context", seed_id=seed_id):
-        # A search engine wants a short query, not a whole page. seed_text can
-        # be tens of thousands of characters, so collapse whitespace and keep
-        # only the opening slice. Crude headline extraction, good enough for a
-        # first pass; a smarter version would ask the LLM for a query.
+    with logfire.span("Fetching real world context", seed_id=state["seed_id"]):
+        ## send just the first few characters
+        ## mainly should contain the heading 
+        ## maybe i can improve this later by asking a llm to give 
+        ## the heading to better search for context.
         query = " ".join(state["seed_text"].split())[:400]
-        logfire.info(f"Fetching context for seed {seed_id}")
+        logfire.info(f"Fetching context for seed {state["seed_id"]}")
 
         # call_tavily_tool is async, which is why this node is async too. The
         # MCP call starts a subprocess, so give it its own span and a hard
@@ -87,10 +86,9 @@ async def fetch_context(state: OrchestrationState):
                 timeout=60,
             )
 
-        # Persist raw documents so store_context can ingest them the same way
-        # it ingests a file. Writing is blocking but these are small files.
-        with logfire.span("persist raw web documents", count=len(articles)):
-            count = _persist_articles(seed_id, articles)
+       ## save the fetched articles to disk 
+        with logfire.span("Saving the fetched web documents", count=len(articles)):
+            count = _persist_articles(state["seed_id"], articles)
 
         logfire.info(f"Fetched {count} real-world article(s) via Tavily")
 
