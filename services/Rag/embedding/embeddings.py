@@ -76,6 +76,7 @@ def _probe_custom():
     """
     global _custom_dim
     try:
+        logfire.info("Using Custom Embedding Model")
         vectors = _call_custom_embeddings(["test"])
         _custom_dim = len(vectors[0])
         logfire.info(
@@ -148,6 +149,7 @@ def get_safe_chunk_size() -> int:
 
 def embedding_batch(batch:list[str]) -> list[list[float]]:
     """embedding a batch using the embedding model"""
+    logfire.info("Running embedding model on batches")
     if _model_type == "gemini":
         for r in range (5):
             try:
@@ -161,7 +163,7 @@ def embedding_batch(batch:list[str]) -> list[list[float]]:
                 if rate_limited_check and r!=4:
                     sleep = 60 # the actual rate limit time 
                     logfire.warning(
-                        f"Gemini is getting rate limited:Retrying in {sleep} seconds "
+                        f"Model is getting rate limited:Retrying in {sleep} seconds "
                         f"Attempts left {r+1}/5."
                     )
                     time.sleep(sleep)
@@ -215,7 +217,7 @@ def embedding_query(query:str) -> list[float]:
 def embedded_texts(texts:list[str])-> list[list[float]]: 
     _init()
     all_embeddings: list[list[float]] = []
-    with logfire.span("embed texts", model=_model_type, total=len(texts), batch_size=BATCH_SIZE):
+    with logfire.span("Running embedding model ", model=_model_type, total=len(texts), batch_size=BATCH_SIZE):
         for i in range(0,len(texts), BATCH_SIZE):
             batch = texts[i : i + BATCH_SIZE]
             with logfire.span("Embedded Batch", model=_model_type, start = i, size=len(batch)):

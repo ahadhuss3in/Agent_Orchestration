@@ -1,25 +1,6 @@
 """
 store_context: load every raw source for a seed from disk, convert it to
 plaintext, persist that plaintext, then chunk, embed, and write to Qdrant.
-
-THE FLOW (seed and web are treated the same way)
-------------------------------------------------
-    raw file on disk (DATA/uploads/*.pdf or DATA/web/<seed_id>/*.txt)
-        -> RAG loader            (pdf/html/office/text) -> plaintext
-        -> DATA/plaintext/<seed_id>/<name>.txt          (persisted)
-        -> RAG loader again      (re-read the stored plaintext)
-        -> RAG chunker           -> chunks
-        -> RAG embeddings        -> vectors
-        -> Qdrant upsert         (the only part RAG does not already do)
-
-Everything through chunking is a function already in the RAG module. The
-upsert is written here because RAG's processor.py uses random point ids and a
-payload that does not carry chunk_id/entity_ids, which the graph bridge needs.
-
-The upsert payload is:
-    text, source, source_type, seed_id, chunk_id, chunk_index,
-    chunk_count, title, url, entity_ids
-entity_ids starts empty and extract_entities fills it in later.
 """
 
 import json
@@ -56,17 +37,33 @@ def _get_client() -> QdrantClient:
     )
 
 
-def _ensure_collection(client: QdrantClient) -> None:
-    """Create the collection if missing, sized for the active embedder."""
-    if client.collection_exists(config.QDRANT_COLLECTION):
-        return
-    with logfire.span("ensure qdrant collection", collection=config.QDRANT_COLLECTION):
-        dim = get_embedding_dim()
-        client.create_collection(
-            collection_name=config.QDRANT_COLLECTION,
-            vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
-        )
-        logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
+WIPE_COLLECTION_ON_STORE = True
+
+
+def _reset_collection(client: QdrantClient) -> None:
+    """Ensure the collection exists and is empty, sized for the active embedder.
+
+    Check before the upsert: if the collection exists, clear the old data; if
+    it does not, create it. Either way we end with an empty collection ready
+    for this run's points.
+    """
+    with logfire.span("reset qdrant collection", collection=config.QDRANT_COLLECTION):
+        if WIPE_COLLECTION_ON_STORE and client.collection_exists(
+            config.QDRANT_COLLECTION
+        ):
+            client.delete_collection(config.QDRANT_COLLECTION)
+            logfire.warning(
+                f"Wiped existing collection {config.QDRANT_COLLECTION} "
+                f"(WIPE_COLLECTION_ON_STORE=True)"
+            )
+
+        if not client.collection_exists(config.QDRANT_COLLECTION):
+            dim = get_embedding_dim()
+            client.create_collection(
+                collection_name=config.QDRANT_COLLECTION,
+                vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
+            )
+            logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
 
 
 def _load_plaintext(path: str) -> str:
@@ -135,7 +132,7 @@ def _plaintext_name(src: dict) -> str:
 def store_context(state: OrchestrationState):
     seed_id = state["seed_id"]
     client = _get_client()
-    _ensure_collection(client)
+    _reset_collection(client)
 
     sources = _seed_sources(state) + _web_sources(seed_id)
     plaintext_folder = os.path.join(PLAINTEXT_DIR, seed_id)
@@ -164,7 +161,7 @@ def store_context(state: OrchestrationState):
 
             # 4. chunk.
             with logfire.span(
-                "chunk source",
+                "Starting chunking of saved documents",
                 source=src["source"],
                 chars=len(text),
             ):
@@ -173,7 +170,7 @@ def store_context(state: OrchestrationState):
                 continue
 
             # 5. embed.
-            with logfire.span("embed chunks", count=len(chunks), source=src["source"]):
+            with logfire.span("Embedding  chunks", count=len(chunks), source=src["source"]):
                 vectors = embedded_texts(chunks)
 
             # 6. build points with deterministic ids and the bridge payload.

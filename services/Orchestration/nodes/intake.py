@@ -4,11 +4,10 @@ intake_seed: give the seed a stable identity and turn its PDF into text.
 """
 
 import logfire
-## not needed here for now but keep it here to retrieve it later for when I go for the chunking part 
-from services.Rag.ingestion.chuncking.splitter import chunk_text
-from services.Rag.embedding.embeddings import embedded_texts, get_embedding_dim, get_safe_chunk_size
 
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
+
+## not needed here for now but keep it here to retrieve it later for when I go for the chunking part 
 from services.Rag.ingestion.loaders.pdf_loader import loadpdf
 
 
