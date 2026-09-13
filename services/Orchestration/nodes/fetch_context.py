@@ -1,15 +1,5 @@
 """
 fetch_context: pull live real-world articles for the seed, and persist them.
-
-Everything a Tavily search returns is written to disk before anything else
-touches it, so the same file-based ingestion path can pick it up:
-
-    DATA/web/<seed_id>/<hash>.txt      one raw article, text content
-    DATA/web/<seed_id>/manifest.json   [{file, title, url}]
-
-The file name is a hash of the article url, not its position, so it is stable
-across reruns. That keeps chunk_id (which is built from the source) stable
-too, which is what makes re-running a seed overwrite instead of duplicate.
 """
 
 import asyncio
