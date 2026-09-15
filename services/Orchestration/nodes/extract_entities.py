@@ -1,26 +1,9 @@
 """
-extract_entities: turn the extracted text into entities and relationships.
+extract_entities: turn stored chunks into entities and relationships.
 
-WHAT CHANGED (and why)
-----------------------
-The old version made one LLM call per embedding chunk. A seed is ~25 chunks, so
-that was ~25 calls over text that is really one document split up. Most of the
-tokens spent were just re-sending context and schema instructions 25 times.
-
-Now it works per SOURCE (one file: the seed PDF, or one web article):
-  - if the source text fits EXTRACT_MAX_CHARS, send it in ONE call,
-  - only if it is too long, split it into parts and send each part.
-  - if a part still fails after retries (e.g. the JSON came back too long),
-    split that part in half and try again, down to EXTRACT_MIN_PART_CHARS.
-
-Provenance is rebuilt without extra API calls: after extracting, each entity
-name is matched back against the stored chunk texts to find which chunks it
-came from, and those chunk_ids become its source_chunk_ids. That keeps the
-Qdrant <-> Neo4j bridge working at roughly chunk resolution.
-
-The LLM returns NAMES for relationships; this code assigns ids, never the LLM.
 """
 
+import json
 import time
 from typing import Literal
 
@@ -33,7 +16,6 @@ from app.config import config
 from services.Orchestration.ids import entity_id as make_entity_id
 from services.Orchestration.ids import point_id, slugify
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
-from services.Rag.ingestion.chuncking.splitter import chunk_text
 
 # DeepSeek is OpenAI-compatible. temperature=0 keeps the JSON output stable.
 # The timeout plus limited SDK retries stop one stalled call hanging the run.
@@ -46,11 +28,13 @@ llm = ChatOpenAI(
     max_retries=2,
 )
 
-# How many times to retry one call before splitting or giving up.
+# How many times to retry one call before splitting the group or giving up.
 _MAX_ATTEMPTS = 4
 
 
 class ExtractedEntity(BaseModel):
+    # chunk_id is the label the model was shown, not a real Qdrant id yet.
+    chunk_id: str
     name: str
     type: Literal["Person", "Organization", "Location", "Event", "Entity"]
     description: str
@@ -58,69 +42,74 @@ class ExtractedEntity(BaseModel):
 
 
 class ExtractedRelationship(BaseModel):
-    # by name, not id. The id is assigned after all entities are known.
+    chunk_id: str
     source_name: str
     target_name: str
     type: str
     description: str
 
 
-class SeedExtraction(BaseModel):
+class ChunkExtraction(BaseModel):
     entities: list[ExtractedEntity]
     relationships: list[ExtractedRelationship]
-    threats: list[str]
-    key_points: list[str]
-    precautions: list[str]
-    predictions: list[str]
-
-
-def _norm(text: str) -> str:
-    """Lowercase and collapse whitespace, for comparing free text."""
-    return " ".join(text.split()).lower()
 
 
 def _is_rate_limit(error: Exception) -> bool:
-    """Groq/DeepSeek say 'rate limit' / 429 when tokens-per-minute is hit."""
+    """DeepSeek says 'rate limit' / 429 when tokens-per-minute is hit."""
     message = str(error).lower()
     return "rate_limit" in message or "rate limit" in message or "429" in message
 
 
-def _extract_once(extractor, text: str, label: str) -> SeedExtraction:
-    """One LLM call for one piece of text, with retries.
+def _label(index: int) -> str:
+    """Short local label shown to the model. Long real ids get mangled."""
+    return f"c_{index:03d}"
 
-    Retries 429s (rate limit) and transient parse/tool errors. After
-    _MAX_ATTEMPTS it raises, and the caller decides whether to split the text.
+
+def _extract_once(extractor, chunks: list[dict], label: str):
+    """One LLM call over one group of chunks, with retries.
+
+    Returns (ChunkExtraction, labeled) where `labeled` is the list of
+    (label, chunk) pairs used in the prompt, so the caller can map the labels
+    the model echoed back to the real chunks.
     """
+    labeled = [(_label(i), chunk) for i, chunk in enumerate(chunks)]
+    payload = [{"chunk_id": lbl, "text": chunk["text"]} for lbl, chunk in labeled]
     prompt = f"""
-    Extract a knowledge graph from the scenario text below.
+    Extract a knowledge graph from the JSON array of document chunks below.
+    Each item has a chunk_id and its text.
 
     Respond with a single JSON object, no prose, matching this shape:
     {{
       "entities": [
-        {{"name": "...", "type": "Person|Organization|Location|Event|Entity",
+        {{"chunk_id": "...", "name": "...",
+          "type": "Person|Organization|Location|Event|Entity",
           "description": "...", "role_in_seed": "..."}}
       ],
       "relationships": [
-        {{"source_name": "...", "target_name": "...", "type": "...",
-          "description": "..."}}
-      ],
-      "threats": ["..."],
-      "key_points": ["..."],
-      "precautions": ["..."],
-      "predictions": ["..."]
+        {{"chunk_id": "...", "source_name": "...", "target_name": "...",
+          "type": "...", "description": "..."}}
+      ]
     }}
 
-    Include every person, organization, location, event, or other named
-    entity, and the relationships between them. Use only facts stated in the
-    text. If the text has nothing useful, return empty lists.
+    Rules:
+    - Every entity's chunk_id is the id of the FIRST chunk where it appears.
+      Report each entity once.
+    - Every relationship's chunk_id is the id of the chunk where the
+      relationship is stated. If it is stated in more than one chunk, add one
+      relationship entry per chunk.
+    - Use only the chunk_id values given below, copied exactly.
+    - Use only facts stated in the text. If there is nothing useful, return
+      empty lists.
 
-    TEXT:
-    {text}
+    CHUNKS:
+    {json.dumps(payload, ensure_ascii=False)}
+
+    Remember: only the given chunk_ids, and JSON only.
     """
     last_error: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
         try:
-            return extractor.invoke(prompt)
+            return extractor.invoke(prompt), labeled
         except Exception as e:  # noqa: BLE001 (retry then re-raise below)
             last_error = e
             if attempt == _MAX_ATTEMPTS - 1:
@@ -136,76 +125,80 @@ def _extract_once(extractor, text: str, label: str) -> SeedExtraction:
     raise last_error
 
 
-def _extract_text(extractor, text: str, label: str) -> list[SeedExtraction]:
-    """Extract from one piece of text, splitting in half if it keeps failing.
+def _extract_group(extractor, chunks: list[dict], label: str):
+    """Extract from a group of chunks, splitting the group if it keeps failing.
 
-    A very long part can fail because the JSON response is too big. Splitting
-    it and retrying each half usually succeeds and is still far fewer calls
-    than the old per-embedding-chunk approach.
+    A large group can fail because the JSON response is too large. Halving the
+    group and retrying each half usually succeeds.
     """
     try:
-        return [_extract_once(extractor, text, label)]
+        return [_extract_once(extractor, chunks, label)]
     except Exception as e:
-        if len(text) <= config.EXTRACT_MIN_PART_CHARS:
+        if len(chunks) <= 1:
             raise
-        logfire.warning(f"Extraction failed for {label}, splitting it in half: {e}")
-        half = max(len(text) // 2, config.EXTRACT_MIN_PART_CHARS)
-        results: list[SeedExtraction] = []
-        for index, piece in enumerate(chunk_text(text, chunk_size=half)):
-            results.extend(_extract_text(extractor, piece, f"{label}.{index}"))
-        return results
+        logfire.warning(f"Extraction failed for {label}, splitting the group: {e}")
+        mid = len(chunks) // 2
+        return _extract_group(extractor, chunks[:mid], f"{label}a") + _extract_group(
+            extractor, chunks[mid:], f"{label}b"
+        )
 
 
-def _parts(text: str) -> list[str]:
-    """Split a source into extraction parts only when it is over the budget."""
-    if len(text) <= config.EXTRACT_MAX_CHARS:
-        return [text]
-    return chunk_text(text, chunk_size=config.EXTRACT_MAX_CHARS)
+def _group_chunks(chunks: list[dict]) -> list[list[dict]]:
+    """Pack a source's chunks into groups no larger than EXTRACT_MAX_CHARS.
 
-
-def _group_sources(stored_chunks: list[dict]) -> list[dict]:
-    """Rebuild the full text per source from its chunks.
-
-    store_context stores chunks in order. Joining them back gives the saved
-    plaintext as one document, which is what we now send to the model.
+    Chunks are kept intact (never split mid-chunk): a group is as many whole
+    chunks as fit under the char budget.
     """
-    grouped: dict[tuple, dict] = {}
+    groups: list[list[dict]] = []
+    current: list[dict] = []
+    size = 0
+    for chunk in chunks:
+        length = len(chunk["text"])
+        if current and size + length > config.EXTRACT_MAX_CHARS:
+            groups.append(current)
+            current = []
+            size = 0
+        current.append(chunk)
+        size += length
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _group_by_source(stored_chunks: list[dict]) -> list[dict]:
+    """Split stored chunks into sources, chunks kept in order."""
+    grouped: dict[tuple, list[dict]] = {}
     order: list[tuple] = []
     for chunk in stored_chunks:
         key = (chunk["source"], chunk.get("source_type"))
         if key not in grouped:
-            grouped[key] = {"source": chunk["source"], "chunks": []}
+            grouped[key] = []
             order.append(key)
-        grouped[key]["chunks"].append(chunk)
+        grouped[key].append(chunk)
 
     sources = []
     for key in order:
-        group = grouped[key]
-        group["chunks"].sort(key=lambda c: c.get("chunk_index", 0))
-        sources.append(
-            {
-                "source": group["source"],
-                "source_type": key[1],
-                "text": "\n\n".join(c["text"] for c in group["chunks"]),
-                "chunks": group["chunks"],
-            }
-        )
+        chunks = sorted(grouped[key], key=lambda c: c.get("chunk_index", 0))
+        sources.append({"source": key[0], "source_type": key[1], "chunks": chunks})
     return sources
 
 
-def _provenance(name: str, chunk_slugs: list[tuple[str, str]]) -> list[str]:
-    """Chunk ids whose text mentions this name.
+def _resolve_chunk(reported_id: str, name: str, labeled: list[tuple[str, dict]]):
+    """Map a model-reported label to a real chunk.
 
-    Matches on the slug form so punctuation/spacing differences do not break
-    it. If nothing matches (the model paraphrased the name), fall back to every
-    chunk of the source so the entity is still linked to its provenance.
+    Falls back to matching the name in the group's chunk text when the model
+    returns a label we did not give it, so a typo does not lose the citation.
     """
+    by_label = dict(labeled)
+    if reported_id in by_label:
+        return by_label[reported_id]
+
     target = slugify(name)
     if target:
-        matched = [cid for cid, slug in chunk_slugs if target in slug]
-        if matched:
-            return matched
-    return [cid for cid, _ in chunk_slugs]
+        for _, chunk in labeled:
+            if target in slugify(chunk["text"]):
+                return chunk
+    return None
 
 
 def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
@@ -231,77 +224,74 @@ def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
             )
     logfire.info(f"Linked {len(chunk_to_entities)} chunks to their entities")
 
-## tested the whole run -it was faster and cheaper than the older one, simple fix 
+
 def extract_entities(state: OrchestrationState):
     seed_id = state["seed_id"]
-    stored_chunks = state["stored_chunks"]
-    sources = _group_sources(stored_chunks)
+    sources = _group_by_source(state["stored_chunks"])
 
-    extractor = llm.with_structured_output(SeedExtraction, method="json_mode")
+    # json_mode, not the default tool calling: tool-calling structured output
+    # dropped the tool call once the answer ran long.
+    extractor = llm.with_structured_output(ChunkExtraction, method="json_mode")
 
-    
+    # Merge accumulators. Entities keyed on (type, slug(name)), relationships on
+    # (source slug, target slug, type). Same canonicalization as entity_id.
+    # Each entity carries {chunk_id: chunk_index} so we can keep the earliest.
     entities_by_key: dict[tuple, dict] = {}
     rels_by_key: dict[tuple, dict] = {}
-
-    briefing: dict[str, list[str]] = {
-        "threats": [],
-        "key_points": [],
-        "precautions": [],
-        "predictions": [],
-    }
-    seen_briefing: set[str] = set()
 
     call_count = 0
     with logfire.span("Extracting entities", seed_id=seed_id, sources=len(sources)):
         for source in sources:
-            chunk_slugs = [(c["chunk_id"], slugify(c["text"])) for c in source["chunks"]]
-            parts = _parts(source["text"])
+            groups = _group_chunks(source["chunks"])
             logfire.info(
                 "extracting source",
                 source=source["source"],
                 source_type=source["source_type"],
-                chars=len(source["text"]),
-                parts=len(parts),
+                chunks=len(source["chunks"]),
+                groups=len(groups),
             )
 
-            for part_index, part in enumerate(parts):
-                label = f"{source['source']}:part{part_index}"
-                # One span per extraction call. Fewer, larger calls than the old
-                # per-chunk version, so this is where the time now sits.
+            for group_index, group in enumerate(groups):
+                label = f"{source['source']}:g{group_index}"
+                # One span per extraction call, this is where the time sits.
                 with logfire.span(
-                    "extract source part",
+                    "extract chunk group",
                     source=source["source"],
-                    source_type=source["source_type"],
-                    part=part_index,
-                    chars=len(part),
+                    group=group_index,
+                    chunks=len(group),
+                    chars=sum(len(c["text"]) for c in group),
                 ):
                     try:
-                        results = _extract_text(extractor, part, label)
+                        results = _extract_group(extractor, group, label)
                     except Exception as e:  # noqa: BLE001 (one source must not sink the run)
                         logfire.warning(f"Extraction failed for {label}: {e}")
                         continue
                 call_count += len(results)
 
-                for result in results:
+                for result, labeled in results:
                     for ent in result.entities:
+                        chunk = _resolve_chunk(ent.chunk_id, ent.name, labeled)
                         key = (ent.type, slugify(ent.name))
-                        found = _provenance(ent.name, chunk_slugs)
                         if key in entities_by_key:
                             existing = entities_by_key[key]
-                            for cid in found:
-                                if cid not in existing["source_chunk_ids"]:
-                                    existing["source_chunk_ids"].append(cid)
+                            if chunk is not None:
+                                existing["chunks"][chunk["chunk_id"]] = chunk.get(
+                                    "chunk_index", 0
+                                )
                             if len(ent.description) > len(existing["description"]):
                                 existing["description"] = ent.description
                             if len(ent.role_in_seed) > len(existing["role_in_seed"]):
                                 existing["role_in_seed"] = ent.role_in_seed
                         else:
+                            chunks: dict[str, int] = {}
+                            if chunk is not None:
+                                chunks[chunk["chunk_id"]] = chunk.get("chunk_index", 0)
                             entities_by_key[key] = {
                                 "name": ent.name,
                                 "type": ent.type,
                                 "description": ent.description,
                                 "role_in_seed": ent.role_in_seed,
-                                "source_chunk_ids": list(found),
+                                "chunks": chunks,
                             }
 
                     for rel in result.relationships:
@@ -310,15 +300,15 @@ def extract_entities(state: OrchestrationState):
                             slugify(rel.target_name),
                             rel.type.strip().upper(),
                         )
-                        found = sorted(
-                            set(_provenance(rel.source_name, chunk_slugs))
-                            | set(_provenance(rel.target_name, chunk_slugs))
-                        )
+                        chunk = _resolve_chunk(
+                            rel.chunk_id, rel.source_name, labeled
+                        ) or _resolve_chunk(rel.chunk_id, rel.target_name, labeled)
+                        found: dict[str, int] = {}
+                        if chunk is not None:
+                            found[chunk["chunk_id"]] = chunk.get("chunk_index", 0)
                         if key in rels_by_key:
                             existing = rels_by_key[key]
-                            for cid in found:
-                                if cid not in existing["source_chunk_ids"]:
-                                    existing["source_chunk_ids"].append(cid)
+                            existing["chunks"].update(found)
                             if len(rel.description) > len(existing["description"]):
                                 existing["description"] = rel.description
                         else:
@@ -327,27 +317,30 @@ def extract_entities(state: OrchestrationState):
                                 "target_name": rel.target_name,
                                 "type": rel.type.strip().upper(),
                                 "description": rel.description,
-                                "source_chunk_ids": found,
+                                "chunks": found,
                             }
-
-                    for field, values in (
-                        ("threats", result.threats),
-                        ("key_points", result.key_points),
-                        ("precautions", result.precautions),
-                        ("predictions", result.predictions),
-                    ):
-                        for value in values:
-                            norm = _norm(value)
-                            if norm and norm not in seen_briefing:
-                                seen_briefing.add(norm)
-                                briefing[field].append(value)
 
         # Assign ids now that every entity is known.
         candidate_entities = []
         name_to_id: dict[str, str] = {}
         for data in entities_by_key.values():
             eid = make_entity_id(seed_id, data["type"], data["name"])
-            candidate_entities.append({"entity_id": eid, **data})
+            # Entity provenance is the single earliest chunk it appeared in.
+            if data["chunks"]:
+                first = min(data["chunks"].items(), key=lambda kv: kv[1])[0]
+                chunk_ids = [first]
+            else:
+                chunk_ids = []
+            candidate_entities.append(
+                {
+                    "entity_id": eid,
+                    "name": data["name"],
+                    "type": data["type"],
+                    "description": data["description"],
+                    "role_in_seed": data["role_in_seed"],
+                    "source_chunk_ids": chunk_ids,
+                }
+            )
             canonical = slugify(data["name"])
             if canonical not in name_to_id:
                 name_to_id[canonical] = eid
@@ -371,7 +364,9 @@ def extract_entities(state: OrchestrationState):
                     "target_id": target_id,
                     "type": rel["type"],
                     "description": rel["description"],
-                    "source_chunk_ids": rel["source_chunk_ids"],
+                    "source_chunk_ids": sorted(
+                        rel["chunks"], key=lambda cid: rel["chunks"][cid]
+                    ),
                 }
             )
 
@@ -386,6 +381,5 @@ def extract_entities(state: OrchestrationState):
         return {
             "candidate_entities": candidate_entities,
             "relationships": relationships,
-            "qualitative_briefing": briefing,
             "phase": "entities_extracted",
         }

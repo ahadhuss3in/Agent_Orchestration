@@ -35,7 +35,11 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
-from services.Orchestration.graphdb.neo4j_service import delete_seed
+from services.Orchestration.graphdb.neo4j_service import (
+    delete_seed,
+    get_graph,
+    list_seeds,
+)
 from services.Orchestration.nodes.store_context import PLAINTEXT_DIR, WEB_DIR
 from services.Orchestration.StateGraph.Graph import orchestration_agent
 from services.Rag.retrieval.qdrant_service import delete_seed_points
@@ -50,10 +54,9 @@ _instrument("fastapi", lambda: logfire.instrument_fastapi(app))
 # middleware allows exactly the local dev origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    # Next dev picks the first free port (3000, then 3001, ...) and the old
+    # Vite demo used 5173, so match any local port rather than a fixed list.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -95,7 +98,6 @@ def _summarize(seed_id: str, result: dict) -> dict:
             for e in entities
         ],
         "relationships": relationships,
-        "briefing": result.get("qualitative_briefing", {}),
     }
 
 
@@ -159,6 +161,21 @@ async def submit_seed(file: UploadFile = File(...)):  # noqa: B008 (FastAPI depe
         )
 
     return _summarize(seed_id, result)
+
+
+@app.get("/seeds")
+def seeds():
+    """List seeds that currently have a graph stored, for the UI picker."""
+    return {"seeds": list_seeds()}
+
+
+@app.get("/seed/{seed_id}/graph")
+def seed_graph(seed_id: str):
+    """One seed's stored graph, so the UI can draw the nodes and edges."""
+    graph = get_graph(seed_id)
+    if not graph["nodes"]:
+        raise HTTPException(status_code=404, detail=f"No graph stored for {seed_id}")
+    return graph
 
 
 @app.delete("/seed/{seed_id}")

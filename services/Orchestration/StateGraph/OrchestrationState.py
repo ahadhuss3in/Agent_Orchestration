@@ -19,5 +19,3 @@ class OrchestrationState(TypedDict):
 ## not yet built
     candidate_entities: list[dict]
     relationships: list[dict]
-
-    qualitative_briefing: dict

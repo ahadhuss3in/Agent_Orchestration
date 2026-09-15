@@ -181,3 +181,100 @@ def delete_seed(seed_id: str) -> None:
             "MATCH (e) WHERE e.seed_id = $seed_id OR e.entity_id = $seed_id DETACH DELETE e",
             seed_id=seed_id,
         )
+
+
+def reset_graph() -> int:
+    """Delete every node in the database, so a run starts from a clean graph.
+
+    The demo holds one seed at a time, matching store_context wiping Qdrant on
+    every run. Returns how many nodes were removed, for the log line.
+    """
+    with logfire.span("reset neo4j"):
+        with driver.session() as session:
+            removed = session.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+            session.run("MATCH (n) DETACH DELETE n")
+        logfire.warning(f"Wiped Neo4j ({removed} nodes) for a fresh run")
+        return removed
+
+
+def _entity_type(labels: list[str]) -> str:
+    """The entity's type label (Person/Organization/...), ignoring Seed."""
+    for label in labels:
+        if label != "Seed":
+            return label
+    return "Entity"
+
+
+def get_graph(seed_id: str) -> dict:
+    """The whole stored graph for one seed, shaped for the UI.
+
+    nodes: {id, name, type, description, role_in_seed, source_chunk_ids}
+    edges: {source, target, type, description, source_chunk_ids}
+
+    Both directions are filtered to nodes that carry this seed_id, which also
+    drops the Seed node and its PARTICIPATED_IN bookkeeping edges (the Seed
+    node has no seed_id property).
+    """
+    with logfire.span("read graph", seed_id=seed_id), driver.session() as session:
+        node_records = list(
+            session.run(
+                """
+                MATCH (e {seed_id: $seed_id})
+                WHERE NOT e:Seed
+                RETURN e.entity_id AS id,
+                       e.name AS name,
+                       labels(e) AS labels,
+                       e.description AS description,
+                       e.role_in_seed AS role_in_seed,
+                       e.source_chunk_ids AS source_chunk_ids
+                """,
+                seed_id=seed_id,
+            )
+        )
+        edge_records = list(
+            session.run(
+                """
+                MATCH (a {seed_id: $seed_id})-[r]->(b {seed_id: $seed_id})
+                RETURN a.entity_id AS source,
+                       b.entity_id AS target,
+                       type(r) AS type,
+                       r.description AS description,
+                       r.source_chunk_ids AS source_chunk_ids
+                """,
+                seed_id=seed_id,
+            )
+        )
+
+    return {
+        "seed_id": seed_id,
+        "nodes": [
+            {
+                "id": rec["id"],
+                "name": rec["name"],
+                "type": _entity_type(rec["labels"]),
+                "description": rec["description"],
+                "role_in_seed": rec["role_in_seed"],
+                "source_chunk_ids": rec["source_chunk_ids"] or [],
+            }
+            for rec in node_records
+        ],
+        "edges": [
+            {
+                "source": rec["source"],
+                "target": rec["target"],
+                "type": rec["type"],
+                "description": rec["description"],
+                "source_chunk_ids": rec["source_chunk_ids"] or [],
+            }
+            for rec in edge_records
+        ],
+    }
+
+
+def list_seeds() -> list[dict]:
+    """Every seed that has a graph stored, for the UI's picker."""
+    with driver.session() as session:
+        records = session.run(
+            "MATCH (s:Seed) RETURN s.entity_id AS seed_id ORDER BY seed_id"
+        )
+        return [{"seed_id": rec["seed_id"]} for rec in records]

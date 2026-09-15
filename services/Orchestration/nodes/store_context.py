@@ -12,6 +12,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from app.config import config
+from services.Orchestration.graphdb.neo4j_service import reset_graph
 from services.Orchestration.ids import chunk_id as make_chunk_id
 from services.Orchestration.ids import point_id
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
@@ -133,6 +134,9 @@ def store_context(state: OrchestrationState):
     seed_id = state["seed_id"]
     client = _get_client()
     _reset_collection(client)
+    # A run replaces the graph, matching the Qdrant wipe above: the demo holds
+    # one seed at a time, and fetching a stored seed never calls this.
+    reset_graph()
 
     sources = _seed_sources(state) + _web_sources(seed_id)
     plaintext_folder = os.path.join(PLAINTEXT_DIR, seed_id)

@@ -17,6 +17,8 @@ twice. 👉 **visit: [aisimulation.site](https://aisimulation.site)**
 
 ## What this is
 
+*Project still being built*
+
 A knowledge-base engine. Feed it a seed PDF (a real event or a made-up one).
 It extracts the text, optionally pulls live real-world articles, chunks and
 stores that context in Qdrant, extracts the entities and relationships into a
@@ -29,6 +31,16 @@ it extracts text, optionally pulls live articles, stores chunked context in
 Qdrant, extracts entities and relationships into a per-seed Neo4j graph, and
 bridges the two by id. Graph RAG retrieval on top is the next milestone.
 
+## Screenshots
+
+The console: one seed's knowledge graph drawn as a balloon, with every node draggable and all edges bowed outward.
+
+![Knowledge graph console](./project_screenshots/console-graph.png)
+
+Clicking any entity or relationship opens its description and the exact chunks it is grounded in.
+
+![Entity detail with cited chunks](./project_screenshots/console-selection.png)
+
 ## Project layout
 
 ```
@@ -39,6 +51,7 @@ AI-Engine/
     Rag/              Qdrant ingestion + embeddings + retrieval primitives
     MCP/              Tavily web-search MCP server + client
   frontend/           Next.js marketing site ("Pantheon")
+  frontend_app/       Next.js console: run a seed + interactive graph
   docs/               living project docs
 ```
 
@@ -99,19 +112,21 @@ npm run lint    # eslint
 
 ## Testing the pipeline with the console
 
-`frontend2/` is a separate, lightweight Vite + React app for driving the API:
-upload a PDF, run the pipeline, inspect the extracted graph, and delete the
-seed when done. It is not the marketing site.
+`frontend_app/` is a Next.js app for driving the API: pick a stored seed to view
+its graph without re-running, or upload a PDF to run the pipeline, then explore
+the extracted nodes and edges and delete the seed when done. It is not the
+marketing site.
 
 ```bash
-cd frontend2
+cd frontend_app
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # http://localhost:3000 (or the next free port)
 ```
 
-Run the API alongside it (`uvicorn ... --port 8000`); CORS is already allowed
-for `:5173`. `DELETE /seed/{seed_id}` removes that seed's data from both stores.
-Note the API has no auth on that route, so keep it local.
+Run the API alongside it (`uvicorn ... --port 8000`); CORS is allowed for any
+local port. Viewing a stored seed is read-only; a run wipes Qdrant and Neo4j and
+inserts only the new seed. `DELETE /seed/{seed_id}` removes that seed's data from
+both stores. Note the API has no auth on that route, so keep it local.
 
 ## Docs
 
