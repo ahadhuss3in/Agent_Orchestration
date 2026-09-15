@@ -1,6 +1,24 @@
 """
-extract_entities: turn stored context into entities and relationships.
+extract_entities: turn the extracted text into entities and relationships.
 
+WHAT CHANGED (and why)
+----------------------
+The old version made one LLM call per embedding chunk. A seed is ~25 chunks, so
+that was ~25 calls over text that is really one document split up. Most of the
+tokens spent were just re-sending context and schema instructions 25 times.
+
+Now it works per SOURCE (one file: the seed PDF, or one web article):
+  - if the source text fits EXTRACT_MAX_CHARS, send it in ONE call,
+  - only if it is too long, split it into parts and send each part.
+  - if a part still fails after retries (e.g. the JSON came back too long),
+    split that part in half and try again, down to EXTRACT_MIN_PART_CHARS.
+
+Provenance is rebuilt without extra API calls: after extracting, each entity
+name is matched back against the stored chunk texts to find which chunks it
+came from, and those chunk_ids become its source_chunk_ids. That keeps the
+Qdrant <-> Neo4j bridge working at roughly chunk resolution.
+
+The LLM returns NAMES for relationships; this code assigns ids, never the LLM.
 """
 
 import time
@@ -15,22 +33,20 @@ from app.config import config
 from services.Orchestration.ids import entity_id as make_entity_id
 from services.Orchestration.ids import point_id, slugify
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
+from services.Rag.ingestion.chuncking.splitter import chunk_text
 
-# DeepSeek is OpenAI-compatible, so ChatOpenAI talks to it with only a base_url
-# change. Switched off Groq because its free tier rate-limited a run badly.
-# temperature=0 keeps the JSON output stable.
+# DeepSeek is OpenAI-compatible. temperature=0 keeps the JSON output stable.
+# The timeout plus limited SDK retries stop one stalled call hanging the run.
 llm = ChatOpenAI(
     api_key=config.DEEPSEEK_API_KEY,
     base_url=config.DEEPSEEK_BASE_URL,
     model=config.DEEPSEEK_MODEL,
     temperature=0,
-    # A hard timeout plus limited SDK retries. Without a timeout one stalled
-    # HTTP call can hang the entire graph, which looks like "no response".
     timeout=60,
     max_retries=2,
 )
 
-# How many times to retry one chunk before giving up on it.
+# How many times to retry one call before splitting or giving up.
 _MAX_ATTEMPTS = 4
 
 
@@ -58,29 +74,25 @@ class SeedExtraction(BaseModel):
     predictions: list[str]
 
 
-def _norm(name: str) -> str:
-    """Normalize a name for comparison. "Jane  Doe " and "jane doe" match."""
-    return " ".join(name.split()).lower()
+def _norm(text: str) -> str:
+    """Lowercase and collapse whitespace, for comparing free text."""
+    return " ".join(text.split()).lower()
 
 
 def _is_rate_limit(error: Exception) -> bool:
-    """Groq says 'rate limit' / 429 when we exceed tokens-per-minute."""
+    """Groq/DeepSeek say 'rate limit' / 429 when tokens-per-minute is hit."""
     message = str(error).lower()
     return "rate_limit" in message or "rate limit" in message or "429" in message
 
 
-def _extract_one_chunk(extractor, text: str, cid: str) -> SeedExtraction:
-    """One LLM call for one chunk, with retries.
+def _extract_once(extractor, text: str, label: str) -> SeedExtraction:
+    """One LLM call for one piece of text, with retries.
 
-    Retries matter here for two reasons found on a real run:
-      - 429 rate limits. The free Groq tier limits tokens per minute and one
-        seed is many calls, so a chunk can be rejected mid-run. Back off and
-        retry instead of losing the chunk.
-      - transient parse/tool errors. Retrying usually succeeds.
-    After _MAX_ATTEMPTS the chunk is left to the caller to skip.
+    Retries 429s (rate limit) and transient parse/tool errors. After
+    _MAX_ATTEMPTS it raises, and the caller decides whether to split the text.
     """
     prompt = f"""
-    Extract a knowledge graph from this single chunk of a scenario.
+    Extract a knowledge graph from the scenario text below.
 
     Respond with a single JSON object, no prose, matching this shape:
     {{
@@ -100,9 +112,9 @@ def _extract_one_chunk(extractor, text: str, cid: str) -> SeedExtraction:
 
     Include every person, organization, location, event, or other named
     entity, and the relationships between them. Use only facts stated in the
-    text. If the chunk has nothing useful, return empty lists.
+    text. If the text has nothing useful, return empty lists.
 
-    CHUNK:
+    TEXT:
     {text}
     """
     last_error: Exception | None = None
@@ -118,15 +130,86 @@ def _extract_one_chunk(extractor, text: str, cid: str) -> SeedExtraction:
             sleep = (10 * (attempt + 1)) if _is_rate_limit(e) else (2 * (attempt + 1))
             logfire.warning(
                 f"Extraction attempt {attempt + 1}/{_MAX_ATTEMPTS} failed for "
-                f"{cid}, retrying in {sleep}s: {e}"
+                f"{label}, retrying in {sleep}s: {e}"
             )
             time.sleep(sleep)
     raise last_error
 
 
-def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
-    """Write entity_ids onto each chunk's Qdrant payload.
+def _extract_text(extractor, text: str, label: str) -> list[SeedExtraction]:
+    """Extract from one piece of text, splitting in half if it keeps failing.
+
+    A very long part can fail because the JSON response is too big. Splitting
+    it and retrying each half usually succeeds and is still far fewer calls
+    than the old per-embedding-chunk approach.
     """
+    try:
+        return [_extract_once(extractor, text, label)]
+    except Exception as e:
+        if len(text) <= config.EXTRACT_MIN_PART_CHARS:
+            raise
+        logfire.warning(f"Extraction failed for {label}, splitting it in half: {e}")
+        half = max(len(text) // 2, config.EXTRACT_MIN_PART_CHARS)
+        results: list[SeedExtraction] = []
+        for index, piece in enumerate(chunk_text(text, chunk_size=half)):
+            results.extend(_extract_text(extractor, piece, f"{label}.{index}"))
+        return results
+
+
+def _parts(text: str) -> list[str]:
+    """Split a source into extraction parts only when it is over the budget."""
+    if len(text) <= config.EXTRACT_MAX_CHARS:
+        return [text]
+    return chunk_text(text, chunk_size=config.EXTRACT_MAX_CHARS)
+
+
+def _group_sources(stored_chunks: list[dict]) -> list[dict]:
+    """Rebuild the full text per source from its chunks.
+
+    store_context stores chunks in order. Joining them back gives the saved
+    plaintext as one document, which is what we now send to the model.
+    """
+    grouped: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for chunk in stored_chunks:
+        key = (chunk["source"], chunk.get("source_type"))
+        if key not in grouped:
+            grouped[key] = {"source": chunk["source"], "chunks": []}
+            order.append(key)
+        grouped[key]["chunks"].append(chunk)
+
+    sources = []
+    for key in order:
+        group = grouped[key]
+        group["chunks"].sort(key=lambda c: c.get("chunk_index", 0))
+        sources.append(
+            {
+                "source": group["source"],
+                "source_type": key[1],
+                "text": "\n\n".join(c["text"] for c in group["chunks"]),
+                "chunks": group["chunks"],
+            }
+        )
+    return sources
+
+
+def _provenance(name: str, chunk_slugs: list[tuple[str, str]]) -> list[str]:
+    """Chunk ids whose text mentions this name.
+
+    Matches on the slug form so punctuation/spacing differences do not break
+    it. If nothing matches (the model paraphrased the name), fall back to every
+    chunk of the source so the entity is still linked to its provenance.
+    """
+    target = slugify(name)
+    if target:
+        matched = [cid for cid, slug in chunk_slugs if target in slug]
+        if matched:
+            return matched
+    return [cid for cid, _ in chunk_slugs]
+
+
+def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
+    """Write entity_ids onto each chunk's Qdrant payload (Qdrant -> Neo4j bridge)."""
     chunk_to_entities: dict[str, set[str]] = {}
     for entity in entities:
         for cid in entity["source_chunk_ids"]:
@@ -139,12 +222,8 @@ def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
         url=config.QDRANT_CLUSTER_ENDPOINT,
         api_key=config.QDRANT_API_KEY,
     )
-    # This is N sequential set_payload calls, so it gets its own span. If it
-    # shows up slow in the trace, batch the updates.
     with logfire.span("link chunks to entities", chunks=len(chunk_to_entities)):
         for cid, entity_ids in chunk_to_entities.items():
-            # Qdrant addresses the point by its deterministic UUID, which we
-            # can rebuild from chunk_id with the same helper store_context used.
             client.set_payload(
                 collection_name=config.QDRANT_COLLECTION,
                 payload={"entity_ids": sorted(entity_ids)},
@@ -156,15 +235,15 @@ def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
 def extract_entities(state: OrchestrationState):
     seed_id = state["seed_id"]
     stored_chunks = state["stored_chunks"]
+    sources = _group_sources(stored_chunks)
 
-   
-    # json_mode, not the default tool-calling method. On a real run, Groq's
-    # tool-calling structured output failed repeatedly with "Tool call
-    # validation" / "Failed to parse tool" once the answer ran long. json_mode
-    # asks the model to return the whole JSON response directly, with no
-    # separate tool-call step to skip. This is the same fix already used for
-    # the simulation turns before that stage was removed.
+    # json_mode, not the default tool calling: Groq's tool-calling structured
+    # output dropped the tool call on long answers. Same fix applies to DeepSeek
+    # and avoids a separate tool-call step.
     extractor = llm.with_structured_output(SeedExtraction, method="json_mode")
+
+    # Merge accumulators. Entities keyed on (type, slug(name)), relationships on
+    # (source slug, target slug, type). Same canonicalization as entity_id.
     entities_by_key: dict[tuple, dict] = {}
     rels_by_key: dict[tuple, dict] = {}
 
@@ -176,114 +255,110 @@ def extract_entities(state: OrchestrationState):
     }
     seen_briefing: set[str] = set()
 
-    with logfire.span("Extracting entities", seed_id=seed_id, chunks=len(stored_chunks)):
-        for chunk_index, chunk in enumerate(stored_chunks):
-            cid = chunk["chunk_id"]
+    call_count = 0
+    with logfire.span("Extracting entities", seed_id=seed_id, sources=len(sources)):
+        for source in sources:
+            chunk_slugs = [(c["chunk_id"], slugify(c["text"])) for c in source["chunks"]]
+            parts = _parts(source["text"])
+            logfire.info(
+                "extracting source",
+                source=source["source"],
+                source_type=source["source_type"],
+                chars=len(source["text"]),
+                parts=len(parts),
+            )
 
-            # One span per chunk. This is the line item that tells you whether
-            # a slow run is many slow model calls or one stuck one, and it
-            # carries the per-chunk result counts.
-            with logfire.span(
-                "extract chunk",
-                chunk_id=cid,
-                chunk_index=chunk_index,
-                chars=len(chunk["text"]),
-            ):
-                try:
-                    result = _extract_one_chunk(extractor, chunk["text"], cid)
-                except Exception as e:  # noqa: BLE001 (one bad chunk must not sink the run)
-                    logfire.warning(f"Extraction failed for chunk {cid}: {e}")
-                    continue
-                logfire.info(
-                    "chunk extracted",
-                    chunk_id=cid,
-                    entities=len(result.entities),
-                    relationships=len(result.relationships),
-                )
+            for part_index, part in enumerate(parts):
+                label = f"{source['source']}:part{part_index}"
+                # One span per extraction call. Fewer, larger calls than the old
+                # per-chunk version, so this is where the time now sits.
+                with logfire.span(
+                    "extract source part",
+                    source=source["source"],
+                    source_type=source["source_type"],
+                    part=part_index,
+                    chars=len(part),
+                ):
+                    try:
+                        results = _extract_text(extractor, part, label)
+                    except Exception as e:  # noqa: BLE001 (one source must not sink the run)
+                        logfire.warning(f"Extraction failed for {label}: {e}")
+                        continue
+                call_count += len(results)
 
-            for ent in result.entities:
-                # Key on the SLUG, not the raw name. entity_id is built from
-                # slugify(name), so two spellings that slugify the same must
-                # dedup here or they become two entries that MERGE into one
-                # Neo4j node. That mismatch was a real bug: "US-Iran talks" and
-                # a variant with a non-breaking hyphen produced two entity
-                # entries but one node, so counts disagreed and the UI showed
-                # duplicate rows.
-                key = (ent.type, slugify(ent.name))
-                if key in entities_by_key:
-                    existing = entities_by_key[key]
-                    # Provenance: remember every chunk this entity showed up in.
-                    if cid not in existing["source_chunk_ids"]:
-                        existing["source_chunk_ids"].append(cid)
-                    # Different chunks describe the same entity differently.
-                    # Rule chosen here: keep the longest description and role,
-                    # on the idea that more text carries more information.
-                    if len(ent.description) > len(existing["description"]):
-                        existing["description"] = ent.description
-                    if len(ent.role_in_seed) > len(existing["role_in_seed"]):
-                        existing["role_in_seed"] = ent.role_in_seed
-                else:
-                    entities_by_key[key] = {
-                        "name": ent.name,
-                        "type": ent.type,
-                        "description": ent.description,
-                        "role_in_seed": ent.role_in_seed,
-                        "source_chunk_ids": [cid],
-                    }
+                for result in results:
+                    for ent in result.entities:
+                        key = (ent.type, slugify(ent.name))
+                        found = _provenance(ent.name, chunk_slugs)
+                        if key in entities_by_key:
+                            existing = entities_by_key[key]
+                            for cid in found:
+                                if cid not in existing["source_chunk_ids"]:
+                                    existing["source_chunk_ids"].append(cid)
+                            if len(ent.description) > len(existing["description"]):
+                                existing["description"] = ent.description
+                            if len(ent.role_in_seed) > len(existing["role_in_seed"]):
+                                existing["role_in_seed"] = ent.role_in_seed
+                        else:
+                            entities_by_key[key] = {
+                                "name": ent.name,
+                                "type": ent.type,
+                                "description": ent.description,
+                                "role_in_seed": ent.role_in_seed,
+                                "source_chunk_ids": list(found),
+                            }
 
-            for rel in result.relationships:
-                # Same canonicalization as entities so two spellings of the
-                # same endpoint dedup to one edge.
-                key = (slugify(rel.source_name), slugify(rel.target_name), rel.type.strip().upper())
-                if key in rels_by_key:
-                    existing = rels_by_key[key]
-                    if cid not in existing["source_chunk_ids"]:
-                        existing["source_chunk_ids"].append(cid)
-                    if len(rel.description) > len(existing["description"]):
-                        existing["description"] = rel.description
-                else:
-                    rels_by_key[key] = {
-                        "source_name": rel.source_name,
-                        "target_name": rel.target_name,
-                        "type": rel.type.strip().upper(),
-                        "description": rel.description,
-                        "source_chunk_ids": [cid],
-                    }
+                    for rel in result.relationships:
+                        key = (
+                            slugify(rel.source_name),
+                            slugify(rel.target_name),
+                            rel.type.strip().upper(),
+                        )
+                        found = sorted(
+                            set(_provenance(rel.source_name, chunk_slugs))
+                            | set(_provenance(rel.target_name, chunk_slugs))
+                        )
+                        if key in rels_by_key:
+                            existing = rels_by_key[key]
+                            for cid in found:
+                                if cid not in existing["source_chunk_ids"]:
+                                    existing["source_chunk_ids"].append(cid)
+                            if len(rel.description) > len(existing["description"]):
+                                existing["description"] = rel.description
+                        else:
+                            rels_by_key[key] = {
+                                "source_name": rel.source_name,
+                                "target_name": rel.target_name,
+                                "type": rel.type.strip().upper(),
+                                "description": rel.description,
+                                "source_chunk_ids": found,
+                            }
 
-            # Briefing lists are short free text. Dedupe on normalized text so
-            # the same point said twice does not show up twice.
-            for field, values in (
-                ("threats", result.threats),
-                ("key_points", result.key_points),
-                ("precautions", result.precautions),
-                ("predictions", result.predictions),
-            ):
-                for value in values:
-                    norm = _norm(value)
-                    if norm and norm not in seen_briefing:
-                        seen_briefing.add(norm)
-                        briefing[field].append(value)
+                    for field, values in (
+                        ("threats", result.threats),
+                        ("key_points", result.key_points),
+                        ("precautions", result.precautions),
+                        ("predictions", result.predictions),
+                    ):
+                        for value in values:
+                            norm = _norm(value)
+                            if norm and norm not in seen_briefing:
+                                seen_briefing.add(norm)
+                                briefing[field].append(value)
 
-        # Now that every entity is known, assign ids. make_entity_id uses the
-        # per-seed scheme from ids.py: "seed-x:person-jane-doe".
+        # Assign ids now that every entity is known.
         candidate_entities = []
-        # Keyed by slug, the same canonical form used for dedup above, so a
-        # relationship that spells an endpoint differently still resolves.
         name_to_id: dict[str, str] = {}
         for data in entities_by_key.values():
             eid = make_entity_id(seed_id, data["type"], data["name"])
             candidate_entities.append({"entity_id": eid, **data})
-
             canonical = slugify(data["name"])
-            # If the same slug somehow has two types, first one wins.
-            # Relationships only carry a name, so there is no better mapping.
             if canonical not in name_to_id:
                 name_to_id[canonical] = eid
             else:
                 logfire.warning(f"Duplicate entity name across types: {data['name']}")
 
-        # Map relationship names to ids. Drop any edge whose endpoint was never
-        # extracted, rather than writing a dangling id into Neo4j.
+        # Resolve relationship names to ids; drop any edge with a missing endpoint.
         relationships = []
         for rel in rels_by_key.values():
             source_id = name_to_id.get(slugify(rel["source_name"]))
@@ -304,12 +379,12 @@ def extract_entities(state: OrchestrationState):
                 }
             )
 
-        # Close the bridge in the Qdrant direction.
         _link_chunks_to_entities(seed_id, candidate_entities)
 
         logfire.info(
             f"Extracted {len(candidate_entities)} entities and "
-            f"{len(relationships)} relationships from {len(stored_chunks)} chunks"
+            f"{len(relationships)} relationships from {len(sources)} sources "
+            f"in {call_count} extraction call(s)"
         )
 
         return {

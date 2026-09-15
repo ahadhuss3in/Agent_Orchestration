@@ -28,6 +28,13 @@ class config:
     DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
 
+    # Extraction input budget. extract_entities sends a whole source (one file)
+    # in a single call when it fits, and only splits it into parts when it does
+    # not. Chars, not words, to match the chunker. Roughly 4 chars per token, so
+    # the defaults are about 3000 and 500 tokens. Tune per model context size.
+    EXTRACT_MAX_CHARS = int(os.getenv("EXTRACT_MAX_CHARS", "12000"))
+    EXTRACT_MIN_PART_CHARS = int(os.getenv("EXTRACT_MIN_PART_CHARS", "2000"))
+
     NEO4J_URI = os.getenv("NEO4J_URI")
     NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
