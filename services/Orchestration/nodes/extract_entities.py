@@ -231,19 +231,15 @@ def _link_chunks_to_entities(seed_id: str, entities: list[dict]) -> None:
             )
     logfire.info(f"Linked {len(chunk_to_entities)} chunks to their entities")
 
-
+## tested the whole run -it was faster and cheaper than the older one, simple fix 
 def extract_entities(state: OrchestrationState):
     seed_id = state["seed_id"]
     stored_chunks = state["stored_chunks"]
     sources = _group_sources(stored_chunks)
 
-    # json_mode, not the default tool calling: Groq's tool-calling structured
-    # output dropped the tool call on long answers. Same fix applies to DeepSeek
-    # and avoids a separate tool-call step.
     extractor = llm.with_structured_output(SeedExtraction, method="json_mode")
 
-    # Merge accumulators. Entities keyed on (type, slug(name)), relationships on
-    # (source slug, target slug, type). Same canonicalization as entity_id.
+    
     entities_by_key: dict[tuple, dict] = {}
     rels_by_key: dict[tuple, dict] = {}
 
