@@ -4,11 +4,17 @@ import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 
 import { nodeRadius } from "@/lib/layout";
+import type { Archetype } from "@/lib/api";
+import { ARCHETYPE_CODE } from "@/lib/archetypes";
 
 export type EntityNodeData = {
   label: string;
   type: string;
   degree: number;
+  /** Non-null when the entity is in the agent pool. */
+  agentRank: number | null;
+  /** Set once a human assigns a personality. */
+  archetype: Archetype | null;
 };
 
 export type EntityFlowNode = Node<EntityNodeData, "entity">;
@@ -25,11 +31,21 @@ const TYPE_GLYPH: Record<string, string> = {
 function EntityNodeView({ data, selected }: NodeProps<EntityFlowNode>) {
   const size = nodeRadius(data.degree) * 2;
   return (
-    <div className="entity-node" data-selected={selected}>
+    <div
+      className="entity-node"
+      data-selected={selected}
+      data-pool={data.agentRank != null}
+      data-promoted={data.archetype != null}
+    >
       <Handle type="target" position={Position.Top} />
       <div className="entity-dot" style={{ width: size, height: size }}>
         {TYPE_GLYPH[data.type] ?? TYPE_GLYPH.Entity}
       </div>
+      {data.archetype && (
+        <span className="agent-badge" title={data.archetype}>
+          {ARCHETYPE_CODE[data.archetype]}
+        </span>
+      )}
       <div className="entity-name" title={data.label}>
         {data.label}
       </div>

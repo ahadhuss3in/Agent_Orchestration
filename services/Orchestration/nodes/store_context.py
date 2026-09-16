@@ -66,6 +66,21 @@ def _reset_collection(client: QdrantClient) -> None:
             )
             logfire.info(f"Created collection {config.QDRANT_COLLECTION} ({dim}-dim, cosine)")
 
+        # Qdrant refuses a filter on a payload field that has no index, and this
+        # collection is deleted and recreated on every run, so the indexes have
+        # to be rebuilt here too. Without them every seed-scoped search
+        # (agent chat, Graph RAG retrieval) silently returns nothing.
+        schema = client.get_collection(config.QDRANT_COLLECTION).payload_schema or {}
+        for field in ("seed_id", "entity_ids"):
+            if field in schema:
+                continue
+            client.create_payload_index(
+                collection_name=config.QDRANT_COLLECTION,
+                field_name=field,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            logfire.info(f"Created keyword index on '{field}'")
+
 
 def _load_plaintext(path: str) -> str:
     """Reuse the RAG loaders by extension. Returns plaintext."""

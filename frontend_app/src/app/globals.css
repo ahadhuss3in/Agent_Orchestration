@@ -168,6 +168,7 @@ body {
    ------------------------------------------------------------ */
 
 .entity-node {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -291,4 +292,127 @@ body {
 .react-flow__minimap {
   background: var(--paper-raised);
   border: 1px solid var(--line);
+}
+
+/* ------------------------------------------------------------
+   Agents. Monochrome only: pool membership is a dashed ring, a
+   promoted entity is a solid ring plus a code badge. Ignition
+   stays reserved for selection.
+   ------------------------------------------------------------ */
+
+.entity-node[data-pool="true"] .entity-dot {
+  outline: 1px dashed var(--line-strong);
+  outline-offset: 3px;
+}
+
+.entity-node[data-promoted="true"] .entity-dot {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.agent-badge {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 2px;
+  padding: 1px 4px;
+  pointer-events: none;
+}
+
+.agent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 6px;
+}
+
+.agent-row[data-promoted="true"] {
+  border-color: var(--line-strong);
+}
+
+.agent-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.agent-row-main:hover {
+  color: var(--ink);
+}
+
+.agent-rank {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
+.agent-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.agent-degree {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
+.archetype-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.archetype-option {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 3px 0;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.archetype-option:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.archetype-option[data-active="true"] {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: rgba(245, 245, 245, 0.1);
+}
+
+.archetype-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

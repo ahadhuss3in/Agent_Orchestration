@@ -48,3 +48,14 @@ def entity_id(seed_id: str, entity_type: str, name: str) -> str:
        entity_id("seed-x", "Person", "Jane Doe") -> "seed-x:person-jane-doe"
     """
     return f"{seed_id}:{entity_type.lower()}-{slugify(name)}"
+
+
+def agent_id(seed_id: str, name: str) -> str:
+    """Stable, seed-scoped identity for one agent built from an entity.
+
+    Kept separate from entity_id on purpose: the agent is a different thing
+    from the node it represents (it has an archetype and a memory), so it gets
+    its own id even though today it maps one-to-one onto an entity.
+       agent_id("seed-x", "Jane Doe") -> "seed-x:agent-jane-doe"
+    """
+    return f"{seed_id}:agent-{slugify(name)}"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -12,13 +12,14 @@ import {
   useEdgesState,
   useNodesState,
   type Edge,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import EntityNodeView, { type EntityFlowNode } from "./EntityNode";
 import BalloonEdge, { type BalloonEdgeData } from "./BalloonEdge";
 import { layoutGraph } from "@/lib/layout";
-import type { Graph, GraphEdge, GraphNode } from "@/lib/api";
+import type { Agent, Graph, GraphEdge, GraphNode } from "@/lib/api";
 
 const nodeTypes = { entity: EntityNodeView };
 const edgeTypes = { balloon: BalloonEdge };
@@ -41,7 +42,13 @@ function buildGraphElements(graph: Graph) {
     id: node.id,
     type: "entity",
     position: { x: node.x, y: node.y },
-    data: { label: node.name, type: node.type, degree: node.degree },
+    data: {
+      label: node.name,
+      type: node.type,
+      degree: node.degree,
+      agentRank: null,
+      archetype: null,
+    },
   }));
 
   const edges: Edge[] = graph.edges.map((edge, index) => ({
@@ -68,9 +75,13 @@ function buildGraphElements(graph: Graph) {
 
 export default function GraphView({
   graph,
+  agents,
+  focusNodeId,
   onSelect,
 }: {
   graph: Graph;
+  agents: Agent[];
+  focusNodeId: string | null;
   onSelect: (selection: Selection) => void;
 }) {
   // Controlled React Flow state. Without onNodesChange the drag is discarded,
@@ -87,12 +98,20 @@ export default function GraphView({
   // Hover previews another node, then falls back to the pinned one.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const focusId = hoveredId ?? selectedId;
+  const rfRef = useRef<ReactFlowInstance<EntityFlowNode, Edge> | null>(null);
 
   const rebuild = useCallback(() => {
     const built = buildGraphElements(graph);
     setNodes(built.nodes);
     setEdges(built.edges);
   }, [graph, setNodes, setEdges]);
+
+  // Agent markers are derived from the agents list, not baked into the graph,
+  // so promoting an entity lights its node up without rebuilding the layout.
+  const agentByEntity = useMemo(
+    () => new Map(agents.map((agent) => [agent.entity_id, agent])),
+    [agents],
+  );
 
   // Neighbours of the focused node, including itself. Null means "no focus".
   const neighbours = useMemo(() => {
@@ -105,17 +124,38 @@ export default function GraphView({
     return set;
   }, [focusId, graph.edges]);
 
+  // Jump to a node picked from the pool list. Reads the instance rather than
+  // the nodes state so a drag does not retrigger the effect.
+  useEffect(() => {
+    if (!focusNodeId || !rfRef.current) return;
+    const node = rfRef.current.getNode(focusNodeId);
+    if (!node) return;
+    setSelectedId(focusNodeId);
+    rfRef.current.setCenter(node.position.x, node.position.y, {
+      zoom: 1.1,
+      duration: 600,
+    });
+  }, [focusNodeId]);
+
   // Styling is derived, never written back into state, so it cannot fight a drag.
   const displayNodes = useMemo<EntityFlowNode[]>(
     () =>
-      nodes.map((node) => ({
-        ...node,
-        style: {
-          ...node.style,
-          opacity: neighbours ? (neighbours.has(node.id) ? 1 : 0.08) : 1,
-        },
-      })),
-    [nodes, neighbours],
+      nodes.map((node) => {
+        const agent = agentByEntity.get(node.id);
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            agentRank: agent ? agent.rank : null,
+            archetype: agent ? agent.archetype : null,
+          },
+          style: {
+            ...node.style,
+            opacity: neighbours ? (neighbours.has(node.id) ? 1 : 0.08) : 1,
+          },
+        };
+      }),
+    [nodes, neighbours, agentByEntity],
   );
 
   const displayEdges = useMemo<Edge[]>(
@@ -135,6 +175,9 @@ export default function GraphView({
       edges={displayEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
+      onInit={(instance) => {
+        rfRef.current = instance;
+      }}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={(_, node) => {

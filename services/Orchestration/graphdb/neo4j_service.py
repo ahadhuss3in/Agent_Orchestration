@@ -18,6 +18,13 @@ Schema:
     })
     (:Entity)-[:PARTICIPATED_IN]->(:Seed)
     (:EntityA)-[:<SANITIZED_TYPE> {description, source_chunk_ids}]->(:EntityB)
+
+    (:Agent {
+        agent_id, seed_id, entity_id, name, type,
+        degree, rank, archetype, status        # status: pool | promoted
+    })
+    (:Entity)-[:REPRESENTED_BY]->(:Agent)
+    (:Agent)-[:SAID]->(:Message {agent_id, seed_id, role, content, seq, created_at})
 """
 
 import re
@@ -26,6 +33,7 @@ import logfire
 from neo4j import GraphDatabase
 
 from app.config import config
+from services.Orchestration.ids import agent_id as make_agent_id
 
 driver = GraphDatabase.driver(
     config.NEO4J_URI,
@@ -220,13 +228,16 @@ def get_graph(seed_id: str) -> dict:
             session.run(
                 """
                 MATCH (e {seed_id: $seed_id})
-                WHERE NOT e:Seed
+                WHERE NOT e:Seed AND NOT e:Agent AND NOT e:Message
+                OPTIONAL MATCH (a:Agent {seed_id: $seed_id, entity_id: e.entity_id})
                 RETURN e.entity_id AS id,
                        e.name AS name,
                        labels(e) AS labels,
                        e.description AS description,
                        e.role_in_seed AS role_in_seed,
-                       e.source_chunk_ids AS source_chunk_ids
+                       e.source_chunk_ids AS source_chunk_ids,
+                       a.rank AS agent_rank,
+                       a.archetype AS archetype
                 """,
                 seed_id=seed_id,
             )
@@ -235,6 +246,8 @@ def get_graph(seed_id: str) -> dict:
             session.run(
                 """
                 MATCH (a {seed_id: $seed_id})-[r]->(b {seed_id: $seed_id})
+                WHERE NOT a:Agent AND NOT b:Agent
+                  AND NOT a:Message AND NOT b:Message
                 RETURN a.entity_id AS source,
                        b.entity_id AS target,
                        type(r) AS type,
@@ -255,6 +268,10 @@ def get_graph(seed_id: str) -> dict:
                 "description": rec["description"],
                 "role_in_seed": rec["role_in_seed"],
                 "source_chunk_ids": rec["source_chunk_ids"] or [],
+                # Non-null only for entities in the agent pool; the console
+                # uses these to ring and label the promotable nodes.
+                "agent_rank": rec["agent_rank"],
+                "archetype": rec["archetype"],
             }
             for rec in node_records
         ],
@@ -278,3 +295,225 @@ def list_seeds() -> list[dict]:
             "MATCH (s:Seed) RETURN s.entity_id AS seed_id ORDER BY seed_id"
         )
         return [{"seed_id": rec["seed_id"]} for rec in records]
+
+
+# ---------------------------------------------------------------------------
+# Agents: the pool, the archetype a human assigns, and the memory.
+#
+# An :Agent node is a candidate promoted out of the graph. It is a separate
+# node from the entity it represents, so the entity keeps carrying only what
+# extraction found and the agent carries the run-time state (archetype, rank,
+# and the messages it has said). Today that is one-to-one; keeping them apart
+# means simulation state has a home that is not the knowledge graph itself.
+# ---------------------------------------------------------------------------
+
+# Only these entity labels can become agents. A place or an event "acting"
+# reads as noise, and the generic Entity catch-all is a last resort, so the
+# pool is drawn from people and organizations.
+AGENT_POOL_LABELS = ("Person", "Organization")
+
+
+def _agent_label_predicate() -> str:
+    """Cypher label predicate for the pool.
+
+    Labels cannot be parameterized like values, so this string is built from a
+    fixed in-code tuple, never from user input. Same rule as the entity labels
+    in write_entities.
+    """
+    return " OR ".join(f"e:{label}" for label in AGENT_POOL_LABELS)
+
+
+def select_agent_pool(seed_id: str, size: int) -> list[dict]:
+    """Mark the top `size` Person/Organization entities as agent candidates.
+
+    Ranked by relationship count (both directions), excluding the structural
+    Seed link and any Agent/Message nodes so the counts describe the scenario
+    rather than our own bookkeeping. A re-selection replaces the previous pool
+    and drops its messages, so a seed never accumulates ghost agents.
+    """
+    with logfire.span("select agent pool", seed_id=seed_id, size=size):
+        with driver.session() as session:
+            session.run(
+                "MATCH (m:Message {seed_id: $seed_id}) DETACH DELETE m",
+                seed_id=seed_id,
+            )
+            session.run(
+                "MATCH (a:Agent {seed_id: $seed_id}) DETACH DELETE a",
+                seed_id=seed_id,
+            )
+
+            rows = session.run(
+                f"""
+                MATCH (e {{seed_id: $seed_id}})
+                WHERE ({_agent_label_predicate()})
+                OPTIONAL MATCH (e)-[r]-(o)
+                WHERE NOT o:Seed AND NOT o:Agent AND NOT o:Message
+                WITH e, count(r) AS degree
+                ORDER BY degree DESC, toLower(e.name) ASC
+                LIMIT $size
+                RETURN e.entity_id AS entity_id,
+                       e.name AS name,
+                       [l IN labels(e) WHERE l <> 'Seed'] AS labels,
+                       degree
+                """,
+                seed_id=seed_id,
+                size=size,
+            ).data()
+
+            payload = [
+                {
+                    "agent_id": make_agent_id(seed_id, row["name"]),
+                    "entity_id": row["entity_id"],
+                    "name": row["name"],
+                    "type": _entity_type(row["labels"]),
+                    "degree": row["degree"],
+                    "rank": rank,
+                }
+                for rank, row in enumerate(rows, start=1)
+            ]
+
+            if payload:
+                session.run(
+                    """
+                    UNWIND $rows AS row
+                    MATCH (e {entity_id: row.entity_id})
+                    WHERE NOT e:Agent AND NOT e:Message
+                    MERGE (a:Agent {agent_id: row.agent_id})
+                    SET a.seed_id = $seed_id,
+                        a.entity_id = row.entity_id,
+                        a.name = row.name,
+                        a.type = row.type,
+                        a.degree = row.degree,
+                        a.rank = row.rank,
+                        a.archetype = null,
+                        a.status = 'pool'
+                    MERGE (e)-[:REPRESENTED_BY]->(a)
+                    """,
+                    rows=payload,
+                    seed_id=seed_id,
+                )
+
+        logfire.info(f"Selected {len(payload)} agent(s) for seed {seed_id}")
+        return payload
+
+
+def get_agent_pool(seed_id: str) -> list[dict]:
+    """Every candidate agent for one seed, ranked, with its current archetype."""
+    with driver.session() as session:
+        records = session.run(
+            """
+            MATCH (a:Agent {seed_id: $seed_id})
+            OPTIONAL MATCH (a)-[:SAID]->(m:Message)
+            RETURN a.agent_id AS agent_id,
+                   a.entity_id AS entity_id,
+                   a.name AS name,
+                   a.type AS type,
+                   a.degree AS degree,
+                   a.rank AS rank,
+                   a.archetype AS archetype,
+                   a.status AS status,
+                   count(m) AS message_count
+            ORDER BY a.rank
+            """,
+            seed_id=seed_id,
+        )
+        return [dict(rec) for rec in records]
+
+
+def get_agent(agent_id: str) -> dict | None:
+    """One agent plus the entity it represents. None if the agent is unknown."""
+    with driver.session() as session:
+        record = session.run(
+            """
+            MATCH (a:Agent {agent_id: $agent_id})
+            OPTIONAL MATCH (a)<-[:REPRESENTED_BY]-(e)
+            RETURN a.agent_id AS agent_id,
+                   a.seed_id AS seed_id,
+                   a.entity_id AS entity_id,
+                   a.name AS name,
+                   a.type AS type,
+                   a.degree AS degree,
+                   a.rank AS rank,
+                   a.archetype AS archetype,
+                   a.status AS status,
+                   e.description AS description,
+                   e.role_in_seed AS role_in_seed
+            """,
+            agent_id=agent_id,
+        ).single()
+        return dict(record) if record else None
+
+
+def set_agent_archetype(
+    seed_id: str, entity_id: str, archetype: str | None
+) -> dict | None:
+    """Assign (or clear) one agent's archetype.
+
+    Passing None is the "leave it as it is" choice: the agent stays in the pool
+    with no personality. Returns the updated row, or None if no such agent.
+    """
+    with driver.session() as session:
+        record = session.run(
+            """
+            MATCH (a:Agent {seed_id: $seed_id, entity_id: $entity_id})
+            SET a.archetype = $archetype,
+                a.status = CASE WHEN $archetype IS NULL THEN 'pool' ELSE 'promoted' END
+            RETURN a.agent_id AS agent_id,
+                   a.entity_id AS entity_id,
+                   a.archetype AS archetype,
+                   a.status AS status
+            """,
+            seed_id=seed_id,
+            entity_id=entity_id,
+            archetype=archetype,
+        ).single()
+        return dict(record) if record else None
+
+
+def append_message(agent_id: str, seed_id: str, role: str, content: str) -> int:
+    """Append one turn to an agent's memory and return its sequence number.
+
+    Memory is nodes, not a JSON blob, so it survives a restart and can be read
+    back in order. `seq` is a plain counter per agent, which avoids depending on
+    timestamp resolution for ordering.
+    """
+    with driver.session() as session:
+        record = session.run(
+            """
+            MATCH (a:Agent {agent_id: $agent_id})
+            OPTIONAL MATCH (a)-[:SAID]->(existing:Message)
+            WITH a, count(existing) AS n
+            CREATE (m:Message {
+                agent_id: $agent_id,
+                seed_id: $seed_id,
+                role: $role,
+                content: $content,
+                seq: n,
+                created_at: datetime()
+            })
+            CREATE (a)-[:SAID]->(m)
+            RETURN m.seq AS seq
+            """,
+            agent_id=agent_id,
+            seed_id=seed_id,
+            role=role,
+            content=content,
+        ).single()
+        return record["seq"] if record else -1
+
+
+def get_messages(agent_id: str, limit: int) -> list[dict]:
+    """The most recent `limit` turns, oldest first, ready to replay to an LLM."""
+    with driver.session() as session:
+        records = session.run(
+            """
+            MATCH (a:Agent {agent_id: $agent_id})-[:SAID]->(m:Message)
+            RETURN m.role AS role, m.content AS content, m.seq AS seq
+            ORDER BY m.seq DESC
+            LIMIT $limit
+            """,
+            agent_id=agent_id,
+            limit=limit,
+        )
+        rows = [dict(rec) for rec in records]
+    return list(reversed(rows))

@@ -4,20 +4,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   deleteSeed,
+  fetchAgents,
   fetchGraph,
   fetchSeeds,
+  promoteAgent,
   submitSeed,
+  type Agent,
+  type Archetype,
   type Graph,
   type SeedSummary,
 } from "@/lib/api";
 import GraphView, { type Selection } from "./GraphView";
 import DetailsPanel from "./DetailsPanel";
+import ArchetypePicker from "./ArchetypePicker";
 
 export default function Console() {
   const [seeds, setSeeds] = useState<SeedSummary[]>([]);
   const [activeSeed, setActiveSeed] = useState<string | null>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -52,13 +59,25 @@ export default function Console() {
     return map;
   }, [graph]);
 
+  const agentsByEntity = useMemo(
+    () => new Map(agents.map((agent) => [agent.entity_id, agent])),
+    [agents],
+  );
+
   async function loadGraph(seedId: string) {
     setSelection(null);
+    setFocusNodeId(null);
     setActiveSeed(seedId);
     try {
-      setGraph(await fetchGraph(seedId));
+      const [nextGraph, nextAgents] = await Promise.all([
+        fetchGraph(seedId),
+        fetchAgents(seedId),
+      ]);
+      setGraph(nextGraph);
+      setAgents(nextAgents);
     } catch (e) {
       setGraph(null);
+      setAgents([]);
       setError((e as Error).message);
     }
   }
@@ -88,11 +107,44 @@ export default function Console() {
       await deleteSeed(activeSeed);
       setSeeds(await fetchSeeds());
       setGraph(null);
+      setAgents([]);
       setActiveSeed(null);
       setSelection(null);
+      setFocusNodeId(null);
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  async function handlePromote(entityId: string, archetype: Archetype | null) {
+    if (!activeSeed) return;
+    const previous = agents;
+    // Optimistic: the marker lights up immediately, the server is the source
+    // of truth and the refetch corrects status/message_count right after.
+    setAgents((prev) =>
+      prev.map((agent) =>
+        agent.entity_id === entityId
+          ? {
+              ...agent,
+              archetype,
+              status: archetype ? "promoted" : "pool",
+            }
+          : agent,
+      ),
+    );
+    try {
+      await promoteAgent(activeSeed, entityId, archetype);
+      setAgents(await fetchAgents(activeSeed));
+    } catch (e) {
+      setAgents(previous);
+      setError((e as Error).message);
+    }
+  }
+
+  function focusAgent(agent: Agent) {
+    const node = graph?.nodes.find((n) => n.id === agent.entity_id);
+    if (node) setSelection({ kind: "node", node, degree: agent.degree });
+    setFocusNodeId(agent.entity_id);
   }
 
   return (
@@ -161,6 +213,42 @@ export default function Console() {
 
           {activeSeed && (
             <section className="flex flex-col gap-2">
+              <p className="hud-label text-ink-dim">Agent pool</p>
+              {agents.length === 0 ? (
+                <p className="text-ink-dim text-xs">
+                  No candidates for this seed.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {agents.map((agent) => (
+                    <div
+                      key={agent.agent_id}
+                      className="agent-row"
+                      data-promoted={agent.status === "promoted"}
+                    >
+                      <button
+                        type="button"
+                        className="agent-row-main"
+                        onClick={() => focusAgent(agent)}
+                        title={`Focus ${agent.name}`}
+                      >
+                        <span className="agent-rank">{agent.rank}</span>
+                        <span className="agent-row-name">{agent.name}</span>
+                        <span className="agent-degree">deg {agent.degree}</span>
+                      </button>
+                      <ArchetypePicker
+                        value={agent.archetype}
+                        onChange={(next) => handlePromote(agent.entity_id, next)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeSeed && (
+            <section className="flex flex-col gap-2">
               <p className="hud-label text-ink-dim">Selected</p>
               <p className="text-ink break-all text-[11px]">{activeSeed}</p>
               <button className="btn btn-danger justify-center" onClick={handleDelete}>
@@ -184,6 +272,8 @@ export default function Console() {
             <GraphView
               key={graph.seed_id}
               graph={graph}
+              agents={agents}
+              focusNodeId={focusNodeId}
               onSelect={setSelection}
             />
           ) : (
@@ -206,6 +296,8 @@ export default function Console() {
           <DetailsPanel
             selection={selection}
             nameById={nameById}
+            agentsByEntity={agentsByEntity}
+            onPromote={handlePromote}
             onClose={() => setSelection(null)}
           />
         </aside>

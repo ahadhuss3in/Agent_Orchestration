@@ -10,6 +10,9 @@ export type EntityType =
   | "Event"
   | "Entity";
 
+/** The four behavioural settings an entity can be promoted into. */
+export type Archetype = "strategist" | "skeptic" | "loyalist" | "wildcard";
+
 export type GraphNode = {
   id: string;
   name: string;
@@ -17,6 +20,9 @@ export type GraphNode = {
   description: string;
   role_in_seed: string;
   source_chunk_ids: string[];
+  /** Set only for entities in the agent pool; null otherwise. */
+  agent_rank?: number | null;
+  archetype?: Archetype | null;
 };
 
 export type GraphEdge = {
@@ -37,6 +43,34 @@ export type SeedSummary = {
   seed_id: string;
 };
 
+/** One candidate in the agent pool, as returned by GET /seed/{id}/agents. */
+export type Agent = {
+  agent_id: string;
+  entity_id: string;
+  name: string;
+  type: EntityType;
+  degree: number;
+  rank: number;
+  archetype: Archetype | null;
+  status: "pool" | "promoted";
+  message_count: number;
+};
+
+/** A passage behind one agent reply. */
+export type Citation = {
+  chunk_id: string | null;
+  source: string | null;
+  score: number;
+};
+
+export type AgentReply = {
+  agent_id: string;
+  name: string;
+  archetype: Archetype | null;
+  reply: string;
+  citations: Citation[];
+};
+
 export type RunSummary = {
   seed_id: string;
   status: string;
@@ -44,6 +78,14 @@ export type RunSummary = {
   chunks_stored: number;
   entities: { entity_id: string; name: string; type: EntityType }[];
   relationships: { source_name: string; type: string; target_name: string }[];
+  agent_pool?: {
+    agent_id: string;
+    entity_id: string;
+    name: string;
+    type: EntityType;
+    degree: number;
+    rank: number;
+  }[];
 };
 
 async function parse<T>(res: Response): Promise<T> {
@@ -79,4 +121,45 @@ export async function deleteSeed(seedId: string): Promise<void> {
     method: "DELETE",
   });
   await parse<unknown>(res);
+}
+
+export async function fetchAgents(seedId: string): Promise<Agent[]> {
+  const res = await fetch(
+    `${API_BASE}/seed/${encodeURIComponent(seedId)}/agents`,
+    { cache: "no-store" },
+  );
+  const data = await parse<{ agents: Agent[] }>(res);
+  return data.agents ?? [];
+}
+
+/** Assign an archetype, or pass null to leave the entity in the pool. */
+export async function promoteAgent(
+  seedId: string,
+  entityId: string,
+  archetype: Archetype | null,
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/seed/${encodeURIComponent(seedId)}/agents/${encodeURIComponent(entityId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archetype }),
+    },
+  );
+  await parse<unknown>(res);
+}
+
+export async function queryAgent(
+  agentId: string,
+  message: string,
+): Promise<AgentReply> {
+  const res = await fetch(
+    `${API_BASE}/agents/${encodeURIComponent(agentId)}/query`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+  );
+  return parse<AgentReply>(res);
 }

@@ -52,6 +52,11 @@ def search_enterprise_knowledge(query: str, limit: int = 8, seed_id: str | None 
             results.append({
                 "content": res.payload.get("text", ""),
                 "source": res.payload.get("source", "Unknown"),
+                # chunk_id is what a citation points at; the agent chat returns
+                # it so every answer can name the passage it came from.
+                "chunk_id": res.payload.get("chunk_id"),
+                "title": res.payload.get("title"),
+                "url": res.payload.get("url"),
                 "score": res.score
             })
         

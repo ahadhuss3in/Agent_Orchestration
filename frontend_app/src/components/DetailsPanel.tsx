@@ -1,5 +1,9 @@
 "use client";
 
+import type { Agent, Archetype } from "@/lib/api";
+import { ARCHETYPE_BY_ID } from "@/lib/archetypes";
+import AgentChat from "./AgentChat";
+import ArchetypePicker from "./ArchetypePicker";
 import type { Selection } from "./GraphView";
 
 function Chunks({ ids }: { ids: string[] }) {
@@ -21,13 +25,49 @@ function Chunks({ ids }: { ids: string[] }) {
   );
 }
 
+function AgentBlock({
+  agent,
+  onPromote,
+}: {
+  agent: Agent;
+  onPromote: (entityId: string, archetype: Archetype | null) => void;
+}) {
+  const archetype = agent.archetype ? ARCHETYPE_BY_ID[agent.archetype] : null;
+  return (
+    <div className="flex flex-col gap-4 border-t border-line pt-4">
+      <div className="flex flex-col gap-1">
+        <p className="hud-label text-ink-dim">Agent</p>
+        <p className="text-ink text-xs">
+          Rank {agent.rank} {"\u00B7"} degree {agent.degree} {"\u00B7"}{" "}
+          {archetype ? archetype.name : "no archetype"}
+        </p>
+        {archetype && (
+          <p className="text-ink-dim text-[11px]">{archetype.role}</p>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <p className="hud-label text-ink-dim">Archetype</p>
+        <ArchetypePicker
+          value={agent.archetype}
+          onChange={(next) => onPromote(agent.entity_id, next)}
+        />
+      </div>
+      <AgentChat key={agent.agent_id} agent={agent} />
+    </div>
+  );
+}
+
 export default function DetailsPanel({
   selection,
   nameById,
+  agentsByEntity,
+  onPromote,
   onClose,
 }: {
   selection: Selection;
   nameById: Map<string, string>;
+  agentsByEntity: Map<string, Agent>;
+  onPromote: (entityId: string, archetype: Archetype | null) => void;
   onClose: () => void;
 }) {
   if (!selection) {
@@ -41,6 +81,9 @@ export default function DetailsPanel({
       </div>
     );
   }
+
+  const agent =
+    selection.kind === "node" ? agentsByEntity.get(selection.node.id) : undefined;
 
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto px-5 py-5">
@@ -77,6 +120,7 @@ export default function DetailsPanel({
             </p>
             <Chunks ids={selection.node.source_chunk_ids} />
           </div>
+          {agent && <AgentBlock agent={agent} onPromote={onPromote} />}
         </>
       ) : (
         <>

@@ -33,12 +33,17 @@ _instrument("mcp", logfire.instrument_mcp)
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from services.Orchestration.agents.archetypes import ARCHETYPE_IDS
+from services.Orchestration.agents.chat import answer_as_agent
 from services.Orchestration.graphdb.neo4j_service import (
     delete_seed,
+    get_agent_pool,
     get_graph,
     list_seeds,
+    set_agent_archetype,
 )
 from services.Orchestration.nodes.store_context import PLAINTEXT_DIR, WEB_DIR
 from services.Orchestration.StateGraph.Graph import orchestration_agent
@@ -64,6 +69,18 @@ app.add_middleware(
 # Uploaded seeds land here. DATA/ is gitignored, so nothing user-uploaded is
 # ever committed. Change this if you move DATA elsewhere.
 UPLOAD_DIR = os.path.join("DATA", "uploads")
+
+
+class PromoteRequest(BaseModel):
+    """Body for setting one agent's archetype. null = leave it in the pool."""
+
+    archetype: str | None = None
+
+
+class AgentQuery(BaseModel):
+    """Body for one chat turn with an agent."""
+
+    message: str
 
 
 def _summarize(seed_id: str, result: dict) -> dict:
@@ -98,6 +115,9 @@ def _summarize(seed_id: str, result: dict) -> dict:
             for e in entities
         ],
         "relationships": relationships,
+        # The shortlist built by select_agent_pool. Returned inline so the
+        # console can show it the moment a run finishes, without a second call.
+        "agent_pool": result.get("agent_pool", []),
     }
 
 
@@ -176,6 +196,50 @@ def seed_graph(seed_id: str):
     if not graph["nodes"]:
         raise HTTPException(status_code=404, detail=f"No graph stored for {seed_id}")
     return graph
+
+
+@app.get("/seed/{seed_id}/agents")
+def seed_agents(seed_id: str):
+    """The agent pool for one seed: candidates, rank, and current archetype."""
+    return {"agents": get_agent_pool(seed_id)}
+
+
+@app.post("/seed/{seed_id}/agents/{entity_id}")
+def promote_agent(seed_id: str, entity_id: str, body: PromoteRequest):
+    """Assign one archetype to one candidate, or clear it by sending null.
+
+    This is the human gate: the engine ranks the candidates, a person decides
+    which of them actually get to act and how each one argues.
+    """
+    if body.archetype is not None and body.archetype not in ARCHETYPE_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown archetype '{body.archetype}'. "
+                f"Allowed: {', '.join(ARCHETYPE_IDS)}"
+            ),
+        )
+    agent = set_agent_archetype(seed_id, entity_id, body.archetype)
+    if not agent:
+        raise HTTPException(
+            status_code=404, detail=f"No agent for {entity_id} in {seed_id}"
+        )
+    return agent
+
+
+@app.post("/agents/{agent_id}/query")
+def agent_chat(agent_id: str, body: AgentQuery):
+    """One chat turn with an agent, answered from the chunks stored for its seed.
+
+    The reply carries the chunks it used, so any answer can be checked against
+    the same passages the pipeline stored.
+    """
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="message must not be empty")
+    try:
+        return answer_as_agent(agent_id, body.message)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No agent {agent_id}")
 
 
 @app.delete("/seed/{seed_id}")

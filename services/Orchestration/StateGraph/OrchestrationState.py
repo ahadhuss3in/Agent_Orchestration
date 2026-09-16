@@ -16,6 +16,9 @@ class OrchestrationState(TypedDict):
 ## chunk storage
     stored_chunks: list[dict]
 
-## not yet built
+## knowledge base
     candidate_entities: list[dict]
     relationships: list[dict]
+
+## agents
+    agent_pool: list[dict]
