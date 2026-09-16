@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { gsap, MOTION_QUERIES } from "@/lib/gsap";
 import { baseReveal } from "@/lib/reveal";
 import { bodyLineReveal, swoosh } from "@/lib/textAnim";
@@ -185,6 +186,38 @@ export function FaqSection() {
               page actually is. Every answer ends somewhere you can go and look
               at the thing it describes.
             </p>
+
+            {/* The console, captured for real rather than mocked. Two frames:
+                the graph mid-layout, then an entity selected with the chunks
+                it is grounded in. Rendered as one figure so the caption speaks
+                for both. `sizes` describes the grid's left column, the only
+                width these ever take. */}
+            <figure className="reveal-target mt-10">
+              <div className="panel panel-glow bracketed overflow-hidden">
+                <Image
+                  src="/img/console-graph.png"
+                  alt="The Knowledge Base Console showing the extracted entities and relationships as a force-directed balloon graph."
+                  width={2940}
+                  height={1506}
+                  sizes="(min-width: 1024px) 38vw, 100vw"
+                  className="block h-auto w-full"
+                />
+              </div>
+              <div className="panel panel-glow bracketed mt-4 overflow-hidden">
+                <Image
+                  src="/img/console-demo-2026.png"
+                  alt="The console running a seed end to end, from picking a stored seed to the laid-out graph."
+                  width={2940}
+                  height={1600}
+                  sizes="(min-width: 1024px) 38vw, 100vw"
+                  className="block h-auto w-full"
+                />
+              </div>
+              <figcaption className="mt-4 font-mono text-[12.5px] leading-relaxed text-ink-dim">
+                The console mid-run. Pick a stored seed or run a new one, and
+                the graph is the knowledge base the pipeline built.
+              </figcaption>
+            </figure>
           </div>
 
           <ul className="reveal-target">

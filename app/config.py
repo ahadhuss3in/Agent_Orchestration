@@ -27,7 +27,9 @@ class config:
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
-
+    CUSTOM_API_KEY = os.getenv("CUSTOM_API_KEY")
+    CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL")
+    CUSTOM_MODEL = os.getenv("CUSTOM_MODEL")
     # Extraction per-call budget. extract_entities sends chunks to the LLM as a
     # pre-indexed JSON array and packs whole chunks into a call up to this many
     # characters. Chars, not words, to match the chunker. Roughly 4 chars per
