@@ -17,12 +17,12 @@ from services.Orchestration.ids import entity_id as make_entity_id
 from services.Orchestration.ids import point_id, slugify
 from services.Orchestration.StateGraph.OrchestrationState import OrchestrationState
 
-# DeepSeek is OpenAI-compatible. temperature=0 keeps the JSON output stable.
+# OpenAI-compatible. temperature=0 keeps the JSON output stable.
 # The timeout plus limited SDK retries stop one stalled call hanging the run.
 llm = ChatOpenAI(
-    api_key=config.DEEPSEEK_API_KEY,
-    base_url=config.DEEPSEEK_BASE_URL,
-    model=config.DEEPSEEK_MODEL,
+    api_key=config.CUSTOM_API_KEY,
+    base_url=config.CUSTOM_BASE_URL,
+    model=config.CUSTOM_MODEL,
     temperature=0,
     timeout=60,
     max_retries=2,
@@ -53,13 +53,16 @@ class ChunkExtraction(BaseModel):
     entities: list[ExtractedEntity]
     relationships: list[ExtractedRelationship]
 
-
+## im building on free models, so this helps keep the retry in check 
 def _is_rate_limit(error: Exception) -> bool:
-    """DeepSeek says 'rate limit' / 429 when tokens-per-minute is hit."""
+    """ Identify  'rate limit' / 429 when tokens-per-minute is hit."""
     message = str(error).lower()
     return "rate_limit" in message or "rate limit" in message or "429" in message
 
 
+## just to shorten the qdrant id so the model can 
+## refer to it easier and save contexxt
+##contextmaxxing
 def _label(index: int) -> str:
     """Short local label shown to the model. Long real ids get mangled."""
     return f"c_{index:03d}"
@@ -67,10 +70,6 @@ def _label(index: int) -> str:
 
 def _extract_once(extractor, chunks: list[dict], label: str):
     """One LLM call over one group of chunks, with retries.
-
-    Returns (ChunkExtraction, labeled) where `labeled` is the list of
-    (label, chunk) pairs used in the prompt, so the caller can map the labels
-    the model echoed back to the real chunks.
     """
     labeled = [(_label(i), chunk) for i, chunk in enumerate(chunks)]
     payload = [{"chunk_id": lbl, "text": chunk["text"]} for lbl, chunk in labeled]
@@ -229,13 +228,8 @@ def extract_entities(state: OrchestrationState):
     seed_id = state["seed_id"]
     sources = _group_by_source(state["stored_chunks"])
 
-    # json_mode, not the default tool calling: tool-calling structured output
-    # dropped the tool call once the answer ran long.
+    # json_modex
     extractor = llm.with_structured_output(ChunkExtraction, method="json_mode")
-
-    # Merge accumulators. Entities keyed on (type, slug(name)), relationships on
-    # (source slug, target slug, type). Same canonicalization as entity_id.
-    # Each entity carries {chunk_id: chunk_index} so we can keep the earliest.
     entities_by_key: dict[tuple, dict] = {}
     rels_by_key: dict[tuple, dict] = {}
 
