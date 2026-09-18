@@ -4,6 +4,7 @@ import {
   forceLink,
   forceManyBody,
   forceSimulation,
+  type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
@@ -25,17 +26,18 @@ export function nodeRadius(degree: number) {
 }
 
 /**
- * Run a force layout to completion and return fixed positions.
+ * Create the force simulation that owns the graph's positions.
  *
- * The simulation is ticked synchronously (not animated) so React Flow gets a
- * settled layout in one pass; the user can then drag nodes freely. Degree is
- * carried through so the node view can size itself by connectivity.
+ * The simulation stays alive: the caller ticks it per animation frame and it
+ * decays on its own ("settle and stop"). Coordinates are circle centres in
+ * React Flow's coordinate space; the node wrapper is sized to the circle so
+ * position is centre minus radius. Degree rides along for node sizing.
  */
-export function layoutGraph(
+export function createGraphSimulation(
   graph: Graph,
   width = 1100,
   height = 720,
-): PositionedNode[] {
+): { simulation: Simulation<SimNode, SimLink>; nodes: SimNode[] } {
   const degree = new Map<string, number>();
   for (const edge of graph.edges) {
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1);
@@ -54,7 +56,10 @@ export function layoutGraph(
     .map((edge) => ({ source: edge.source, target: edge.target }));
 
   const simulation = forceSimulation<SimNode>(nodes)
-    .force("charge", forceManyBody<SimNode>().strength(-190))
+    .force(
+      "charge",
+      forceManyBody<SimNode>().strength(-190).distanceMax(900),
+    )
     .force(
       "link",
       forceLink<SimNode, SimLink>(links)
@@ -65,12 +70,36 @@ export function layoutGraph(
     .force("center", forceCenter(width / 2, height / 2))
     .force(
       "collide",
-      forceCollide<SimNode>().radius((node) => nodeRadius(node.degree) + 10),
+      forceCollide<SimNode>().radius((node) => nodeRadius(node.degree) + 14),
     )
+    .alphaMin(0.02)
+    .alphaDecay(0.028)
     .stop();
 
-  const ticks = Math.min(500, 80 + nodes.length * 2);
-  for (let i = 0; i < ticks; i += 1) simulation.tick();
-
-  return nodes;
+  return { simulation, nodes };
 }
+
+/**
+ * Warm the simulation up synchronously so the first paint shows a settled
+ * cloud (fitView frames something sane, no initial explosion).
+ */
+export function warmup(
+  simulation: Simulation<SimNode, SimLink>,
+  ticks = 60,
+): void {
+  for (let i = 0; i < ticks; i += 1) simulation.tick();
+}
+
+/**
+ * Nudge the simulation back to life. Called after a drag ends or when the
+ * user asks for a re-layout; keeps the current arrangement and relaxes it.
+ *
+ * Deliberately does not call d3's `.restart()`: that would start d3's own
+ * internal timer and double-tick against the caller's rAF loop. The caller
+ * drives every tick with `simulation.tick()`.
+ */
+export function reheat(simulation: Simulation<SimNode, SimLink>, alpha: number) {
+  simulation.alpha(Math.max(simulation.alpha(), alpha)).stop();
+}
+
+export type { SimNode, SimLink };

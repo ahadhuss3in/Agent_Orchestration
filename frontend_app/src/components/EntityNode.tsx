@@ -29,15 +29,23 @@ const TYPE_GLYPH: Record<string, string> = {
 };
 
 function EntityNodeView({ data, selected }: NodeProps<EntityFlowNode>) {
-  const size = nodeRadius(data.degree) * 2;
+  const r = nodeRadius(data.degree);
+  const size = r * 2;
   return (
     <div
       className="entity-node"
+      style={{ width: size, height: size }}
       data-selected={selected}
       data-pool={data.agentRank != null}
       data-promoted={data.archetype != null}
     >
-      <Handle type="target" position={Position.Top} />
+      {/* Handles sit at the node centre so React Flow passes centre
+          coordinates to the edge, which clips to the rim itself. */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
+      />
       <div className="entity-dot" style={{ width: size, height: size }}>
         {TYPE_GLYPH[data.type] ?? TYPE_GLYPH.Entity}
       </div>
@@ -46,10 +54,16 @@ function EntityNodeView({ data, selected }: NodeProps<EntityFlowNode>) {
           {ARCHETYPE_CODE[data.archetype]}
         </span>
       )}
+      {/* Name is an overlay outside the measured box: the wrapper stays
+          exactly the circle, labels never inflate collision extents. */}
       <div className="entity-name" title={data.label}>
         {data.label}
       </div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
+      />
     </div>
   );
 }

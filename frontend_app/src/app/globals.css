@@ -169,10 +169,9 @@ body {
 
 .entity-node {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  /* The wrapper IS the circle. Everything else is an overlay outside the
+     measured box, so React Flow's node position is the circle's top-left
+     and edges anchor to true circle geometry. */
   cursor: grab;
 }
 
@@ -202,15 +201,30 @@ body {
   box-shadow: 0 0 0 3px rgba(255, 106, 61, 0.22);
 }
 
+/* Name floats below the circle, outside the measured node box. */
 .entity-name {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
   max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.03em;
   color: var(--ink-dim);
+  /* Invisible until hover/selection; keeps the layout label-free. */
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.entity-node:hover .entity-name,
+.entity-node[data-selected="true"] .entity-name {
+  opacity: 1;
 }
 
 .entity-node[data-selected="true"] .entity-name {
@@ -277,6 +291,11 @@ body {
 
 .react-flow__controls {
   box-shadow: none;
+}
+
+.graph-panel {
+  display: flex;
+  gap: 6px;
 }
 
 .react-flow__controls-button {
