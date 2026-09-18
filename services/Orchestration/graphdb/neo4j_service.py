@@ -1,30 +1,6 @@
 """
 The Neo4j side of the knowledge base. All Cypher lives here so it can be
 tested without running the LangGraph pipeline.
-
-PER-SEED MODEL
---------------
-Two different seeds that both mention "John Smith" are kept apart by giving
-every entity a seed-prefixed id (see ids.entity_id):
-
-    "seed-a:person-john-smith"  !=  "seed-b:person-john-smith"
-
-Schema:
-
-    (:Seed {seed_id, text})
-    (:Person|Organization|Location|Event|Entity {
-        entity_id, name, description, role_in_seed, seed_id,
-        source_chunk_ids          # provenance back into Qdrant
-    })
-    (:Entity)-[:PARTICIPATED_IN]->(:Seed)
-    (:EntityA)-[:<SANITIZED_TYPE> {description, source_chunk_ids}]->(:EntityB)
-
-    (:Agent {
-        agent_id, seed_id, entity_id, name, type,
-        degree, rank, archetype, status        # status: pool | promoted
-    })
-    (:Entity)-[:REPRESENTED_BY]->(:Agent)
-    (:Agent)-[:SAID]->(:Message {agent_id, seed_id, role, content, seq, created_at})
 """
 
 import re
