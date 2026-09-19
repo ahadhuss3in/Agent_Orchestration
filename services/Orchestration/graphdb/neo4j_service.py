@@ -31,10 +31,6 @@ def write_entities(
     relationships: list[dict],
 ):
     """Write one seed's entities and relationships into Neo4j.
-
-    Everything uses MERGE, keyed on entity_id, never CREATE. MERGE means
-    "match this, or create it if missing", so writing the same seed twice
-    updates the same nodes instead of duplicating them.
     """
     with logfire.span("Writing entities to Neo4j", seed_id=seed_id):
         with driver.session() as session:
@@ -49,10 +45,6 @@ def write_entities(
             # 2. Entity nodes.
             with logfire.span("merge entity nodes", count=len(entities)):
                 for entity in entities:
-                    # The label is f-string interpolated, so it MUST be a fixed
-                    # safe value. It is, because `type` comes from a Pydantic
-                    # Literal with five allowed strings. Property values use
-                    # $parameters and are always safe.
                     label = entity["type"]
                     session.run(
                         f"""
@@ -127,9 +119,6 @@ def get_relationships(entity_id: str) -> list[dict]:
 
 def format_relationships(entity_id: str) -> str:
     """Turn get_relationships() into a text block ready to drop into a prompt,
-    e.g.:
-        - WORKS_FOR -> Acme Corp: Jane is the CFO of Acme.
-        - LIVES_IN <- Berlin: Berlin is where Jane was born.
     """
     relationships = get_relationships(entity_id)
     if not relationships:
@@ -195,9 +184,6 @@ def get_graph(seed_id: str) -> dict:
     nodes: {id, name, type, description, role_in_seed, source_chunk_ids}
     edges: {source, target, type, description, source_chunk_ids}
 
-    Both directions are filtered to nodes that carry this seed_id, which also
-    drops the Seed node and its PARTICIPATED_IN bookkeeping edges (the Seed
-    node has no seed_id property).
     """
     with logfire.span("read graph", seed_id=seed_id), driver.session() as session:
         node_records = list(
@@ -273,19 +259,8 @@ def list_seeds() -> list[dict]:
         return [{"seed_id": rec["seed_id"]} for rec in records]
 
 
-# ---------------------------------------------------------------------------
-# Agents: the pool, the archetype a human assigns, and the memory.
-#
-# An :Agent node is a candidate promoted out of the graph. It is a separate
-# node from the entity it represents, so the entity keeps carrying only what
-# extraction found and the agent carries the run-time state (archetype, rank,
-# and the messages it has said). Today that is one-to-one; keeping them apart
-# means simulation state has a home that is not the knowledge graph itself.
-# ---------------------------------------------------------------------------
 
-# Only these entity labels can become agents. A place or an event "acting"
-# reads as noise, and the generic Entity catch-all is a last resort, so the
-# pool is drawn from people and organizations.
+
 AGENT_POOL_LABELS = ("Person", "Organization")
 
 
@@ -301,11 +276,6 @@ def _agent_label_predicate() -> str:
 
 def select_agent_pool(seed_id: str, size: int) -> list[dict]:
     """Mark the top `size` Person/Organization entities as agent candidates.
-
-    Ranked by relationship count (both directions), excluding the structural
-    Seed link and any Agent/Message nodes so the counts describe the scenario
-    rather than our own bookkeeping. A re-selection replaces the previous pool
-    and drops its messages, so a seed never accumulates ghost agents.
     """
     with logfire.span("select agent pool", seed_id=seed_id, size=size):
         with driver.session() as session:
@@ -424,9 +394,6 @@ def set_agent_archetype(
     seed_id: str, entity_id: str, archetype: str | None
 ) -> dict | None:
     """Assign (or clear) one agent's archetype.
-
-    Passing None is the "leave it as it is" choice: the agent stays in the pool
-    with no personality. Returns the updated row, or None if no such agent.
     """
     with driver.session() as session:
         record = session.run(
