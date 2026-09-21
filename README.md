@@ -49,7 +49,8 @@ AI-Engine/
   services/
     Orchestration/    the pipeline: intake -> fetch -> store -> extract -> graph
     Rag/              Qdrant ingestion + embeddings + retrieval primitives
-    MCP/              Tavily web-search MCP server + client
+    MCP/              MCP servers + client: Tavily web search, social context
+                      (X / Instagram / Facebook) under MCP/social/
   frontend/           Next.js marketing site ("Pantheon")
   frontend_app/       Next.js console: run a seed + interactive graph
   docs/               living project docs

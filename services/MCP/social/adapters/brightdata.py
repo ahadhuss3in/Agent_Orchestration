@@ -108,6 +108,8 @@ class BrightDataAdapter(Adapter):
             missing.append(self._dataset_env)
         if not self.discover_by:
             missing.append(self._discover_env)
+        if not config.SOCIAL_BRIGHTDATA_SEED_URL.get(self.platform):
+            missing.append(self._seed_env)
         return PlatformHealth(
             platform=self.platform,
             adapter=type(self).__name__,
@@ -196,11 +198,9 @@ class BrightDataAdapter(Adapter):
         from config instead of hardcoded — a wrong seed URL returns an empty
         list, which is the failure mode this package refuses to guess at.
         """
-        template = getattr(config, f"SOCIAL_BRIGHTDATA_SEED_URL_{self.platform.upper()}", None)
+        template = config.SOCIAL_BRIGHTDATA_SEED_URL.get(self.platform)
         if not template:
-            raise ProviderNotConfigured(
-                self.platform, f"SOCIAL_BRIGHTDATA_SEED_URL_{self.platform.upper()}"
-            )
+            raise ProviderNotConfigured(self.platform, self._seed_env)
         if request.query_type is QueryType.AUTHOR:
             return template.format(query=request.query.lstrip("@"))
         return template.format(query=request.query.strip().lstrip("#"))
