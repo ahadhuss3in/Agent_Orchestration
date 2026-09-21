@@ -13,6 +13,12 @@ class OrchestrationState(TypedDict):
 
     fetched_context: list[dict]
 
+## social context. Coverage carries per-platform failures, so a platform that
+## could not be fetched is never mistaken downstream for absent demand.
+    social_query_plan: list[dict]
+    social_posts: list[dict]
+    social_coverage: dict
+
 ## chunk storage
     stored_chunks: list[dict]
 

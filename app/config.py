@@ -46,6 +46,40 @@ class config:
     AGENT_CHAT_TOP_K = int(os.getenv("AGENT_CHAT_TOP_K", "8"))
     AGENT_CHAT_MEMORY = int(os.getenv("AGENT_CHAT_MEMORY", "40"))
 
+    # Social context layer (services/MCP/social). X bills per post read and
+    # licensed providers bill per record, so both ceilings are checked before
+    # any network call. SOCIAL_PLATFORMS is an explicit opt-in list: empty
+    # means the social node passes through without fetching anything.
+    SOCIAL_PLATFORMS = [p.strip() for p in os.getenv("SOCIAL_PLATFORMS", "").split(",") if p.strip()]
+    SOCIAL_QUERY_TYPE = os.getenv("SOCIAL_QUERY_TYPE", "keyword")
+    SOCIAL_POSTS_PER_PLATFORM = int(os.getenv("SOCIAL_POSTS_PER_PLATFORM", "50"))
+    SOCIAL_MAX_POSTS = int(os.getenv("SOCIAL_MAX_POSTS", "2000"))
+    SOCIAL_MAX_COST_USD = float(os.getenv("SOCIAL_MAX_COST_USD", "20"))
+    SOCIAL_FETCH_TIMEOUT_SECONDS = int(os.getenv("SOCIAL_FETCH_TIMEOUT_SECONDS", "120"))
+
+    # X official API v2.
+    X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")
+
+    # Bright Data Web Scraper API. dataset_id, discovery mode and discovery seed
+    # URL are all per-platform values taken from the account's Control Panel,
+    # not constants, so they are read from the environment by platform name:
+    # SOCIAL_BRIGHTDATA_DATASET_INSTAGRAM, ..._DISCOVER_BY_INSTAGRAM,
+    # ..._SEED_URL_INSTAGRAM, and the same three for X and FACEBOOK.
+    BRIGHTDATA_API_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN")
+    SOCIAL_BRIGHTDATA_DATASET = {
+        p: os.getenv(f"SOCIAL_BRIGHTDATA_DATASET_{p.upper()}") for p in ("x", "instagram", "facebook")
+    }
+    SOCIAL_BRIGHTDATA_DISCOVER_BY = {
+        p: os.getenv(f"SOCIAL_BRIGHTDATA_DISCOVER_BY_{p.upper()}") for p in ("x", "instagram", "facebook")
+    }
+    SOCIAL_BRIGHTDATA_SEED_URL = {
+        p: os.getenv(f"SOCIAL_BRIGHTDATA_SEED_URL_{p.upper()}") for p in ("x", "instagram", "facebook")
+    }
+    # Per-record price. An assumption until M23 confirms the account's own
+    # rate card; it only feeds the planning ceiling, never a customer-facing cost.
+    SOCIAL_BRIGHTDATA_USD_PER_RECORD = float(os.getenv("SOCIAL_BRIGHTDATA_USD_PER_RECORD", "0.0015"))
+    SOCIAL_PROVIDER_MAX_WAIT_SECONDS = int(os.getenv("SOCIAL_PROVIDER_MAX_WAIT_SECONDS", "180"))
+
     NEO4J_URI = os.getenv("NEO4J_URI")
     NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")

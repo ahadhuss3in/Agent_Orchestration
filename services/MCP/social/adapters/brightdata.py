@@ -90,11 +90,15 @@ class BrightDataAdapter(Adapter):
 
     @property
     def dataset_id(self) -> str | None:
-        return getattr(config, self._dataset_env, None)
+        return config.SOCIAL_BRIGHTDATA_DATASET.get(self.platform)
 
     @property
     def discover_by(self) -> str | None:
-        return getattr(config, self._discover_env, None)
+        return config.SOCIAL_BRIGHTDATA_DISCOVER_BY.get(self.platform)
+
+    @property
+    def _seed_env(self) -> str:
+        return f"SOCIAL_BRIGHTDATA_SEED_URL_{self.platform.upper()}"
 
     def health(self) -> PlatformHealth:
         missing = []
