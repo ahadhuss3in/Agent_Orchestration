@@ -36,7 +36,12 @@ import requests
 from app.config import config
 from services.MCP.social.adapters.base import Adapter, AdapterResult, FetchRequest
 from services.MCP.social.errors import ProviderNotConfigured, ProviderRequestFailed
-from services.MCP.social.normalize import normalize_tags, parse_utc, raw_hash, url_canonical
+from services.MCP.social.normalize import (
+    normalize_tags,
+    parse_utc,
+    raw_hash,
+    url_canonical,
+)
 from services.MCP.social.records import (
     AuthorType,
     MediaType,

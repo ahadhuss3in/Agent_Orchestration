@@ -1,4 +1,5 @@
 import os
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -50,7 +51,9 @@ class config:
     # licensed providers bill per record, so both ceilings are checked before
     # any network call. SOCIAL_PLATFORMS is an explicit opt-in list: empty
     # means the social node passes through without fetching anything.
-    SOCIAL_PLATFORMS = [p.strip() for p in os.getenv("SOCIAL_PLATFORMS", "").split(",") if p.strip()]
+    SOCIAL_PLATFORMS: ClassVar[list[str]] = [
+        p.strip() for p in os.getenv("SOCIAL_PLATFORMS", "").split(",") if p.strip()
+    ]
     SOCIAL_QUERY_TYPE = os.getenv("SOCIAL_QUERY_TYPE", "keyword")
     SOCIAL_POSTS_PER_PLATFORM = int(os.getenv("SOCIAL_POSTS_PER_PLATFORM", "50"))
     SOCIAL_MAX_POSTS = int(os.getenv("SOCIAL_MAX_POSTS", "2000"))
@@ -66,13 +69,13 @@ class config:
     # SOCIAL_BRIGHTDATA_DATASET_INSTAGRAM, ..._DISCOVER_BY_INSTAGRAM,
     # ..._SEED_URL_INSTAGRAM, and the same three for X and FACEBOOK.
     BRIGHTDATA_API_TOKEN = os.getenv("BRIGHTDATA_API_TOKEN")
-    SOCIAL_BRIGHTDATA_DATASET = {
+    SOCIAL_BRIGHTDATA_DATASET: ClassVar[dict[str, str | None]] = {
         p: os.getenv(f"SOCIAL_BRIGHTDATA_DATASET_{p.upper()}") for p in ("x", "instagram", "facebook")
     }
-    SOCIAL_BRIGHTDATA_DISCOVER_BY = {
+    SOCIAL_BRIGHTDATA_DISCOVER_BY: ClassVar[dict[str, str | None]] = {
         p: os.getenv(f"SOCIAL_BRIGHTDATA_DISCOVER_BY_{p.upper()}") for p in ("x", "instagram", "facebook")
     }
-    SOCIAL_BRIGHTDATA_SEED_URL = {
+    SOCIAL_BRIGHTDATA_SEED_URL: ClassVar[dict[str, str | None]] = {
         p: os.getenv(f"SOCIAL_BRIGHTDATA_SEED_URL_{p.upper()}") for p in ("x", "instagram", "facebook")
     }
     # Per-record price. An assumption until M23 confirms the account's own

@@ -38,7 +38,12 @@ from services.MCP.social.errors import (
     ProviderRequestFailed,
     UnsupportedFieldMapping,
 )
-from services.MCP.social.normalize import normalize_tags, parse_utc, raw_hash, url_canonical
+from services.MCP.social.normalize import (
+    normalize_tags,
+    parse_utc,
+    raw_hash,
+    url_canonical,
+)
 from services.MCP.social.records import (
     AuthorType,
     MediaType,

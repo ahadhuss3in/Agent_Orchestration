@@ -53,7 +53,13 @@ async def call_social_tool(tool_name: str, arguments: dict) -> dict:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(tool_name, arguments)
-                text = "".join(block.text for block in result.content)
-                if result.isError:
-                    raise RuntimeError(f"social tool {tool_name} failed: {text[:300]}")
-                return json.loads(text)
+                blocks = [block.text for block in result.content]
+                # The installed mcp version exposes is_error (snake_case), not
+                # the isError spelling most examples show, and it serializes a
+                # returned list as one text block per element rather than one
+                # block for the whole list. Both confirmed against real
+                # responses from this server, not assumed.
+                if result.is_error:
+                    raise RuntimeError(f"social tool {tool_name} failed: {''.join(blocks)[:300]}")
+                payloads = [json.loads(block) for block in blocks]
+                return payloads[0] if len(payloads) == 1 else payloads
