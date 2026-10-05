@@ -1,0 +1,21 @@
+# Normalize line endings in the repo so Windows and macOS checkouts agree.
+* text=auto eol=lf
+
+# Explicit text types.
+*.py    text diff=python
+*.md    text
+*.json  text
+*.ts    text
+*.tsx   text
+*.css   text
+
+# Lockfiles: generated, noisy in diffs.
+package-lock.json linguist-generated=true -diff
+uv.lock           linguist-generated=true -diff
+
+# Binary assets.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.pdf  binary
