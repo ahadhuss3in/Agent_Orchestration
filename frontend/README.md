@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pantheon — marketing site (`frontend/`)
 
-## Getting Started
+This is the public marketing site for AI-Engine. It is **not** the engine and it
+does **not** talk to the API. The console that drives the pipeline lives in
+`../frontend_app/`.
 
-First, run the development server:
+Next.js (App Router) + Tailwind + GSAP, built as a single scrolling page split
+into sections (`Hero`, `SeedJourney`, `AgentsSection`, `SimulationSection`,
+`GraphSection`, `ChatSection`, `FaqSection`, `CtaFooter`), with a couple of
+canvas/3D accents.
+
+## Getting started
+
+Requires Node 20+.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev     # development server
+npm run build   # production build
+npm run start   # serve the production build
+npm run lint    # eslint
+```
 
-## Learn More
+## Layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+frontend/
+  src/app/
+    page.tsx              composes the sections top to bottom
+    layout.tsx            fonts, metadata, theme
+    globals.css           design tokens + section styles
+    api/waitlist/         waitlist capture + export route handlers
+  src/components/         one file per page section, plus cube/ canvas pieces
+  src/lib/                content copy, animation helpers, design tokens
+  public/img/             screenshots and artwork used by the page
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`AGENTS.md` in this folder is generated and re-added by `next dev`; leave it as
+committed rather than editing it by hand.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Content
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The page copy lives in `src/lib/content.ts` rather than being scattered through
+the components, so wording can be changed in one place. Keep the four archetype
+ids (`strategist`, `skeptic`, `loyalist`, `wildcard`) in sync with the engine's
+`services/Orchestration/agents/archetypes.py` and the console's
+`frontend_app/src/lib/archetypes.ts` — all three are meant to agree.
