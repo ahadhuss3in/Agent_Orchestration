@@ -21,6 +21,7 @@ import EntityNodeView, {
   type EntityNodeData,
 } from "./EntityNode";
 import BalloonEdge, { type BalloonEdgeData } from "./BalloonEdge";
+import GraphLegend from "./GraphLegend";
 import {
   createGraphSimulation,
   nodeRadius,
@@ -421,6 +422,9 @@ export default function GraphView({
         >
           {paused ? "Resume" : "Pause"}
         </button>
+      </Panel>
+      <Panel position="bottom-left">
+        <GraphLegend />
       </Panel>
     </ReactFlow>
   );

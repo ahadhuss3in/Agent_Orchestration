@@ -20,7 +20,7 @@ export type EntityNodeData = {
 export type EntityFlowNode = Node<EntityNodeData, "entity">;
 
 // Shape carries the entity type; colour is never the only signal.
-const TYPE_GLYPH: Record<string, string> = {
+export const TYPE_GLYPH: Record<string, string> = {
   Person: "\u25C6", // diamond
   Organization: "\u25A0", // square
   Location: "\u25B2", // triangle
