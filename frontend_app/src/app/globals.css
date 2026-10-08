@@ -169,6 +169,43 @@ body {
   background: rgba(255, 106, 61, 0.08);
 }
 
+/* Error surfaced by any action, with a way to clear it. */
+.error-box {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 8px 10px;
+}
+
+.error-box-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.error-box-dismiss {
+  flex-shrink: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.error-box-dismiss:hover {
+  color: var(--ink);
+}
+
 .field {
   background: var(--paper);
   border: 1px solid var(--line);

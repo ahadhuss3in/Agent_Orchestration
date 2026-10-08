@@ -195,7 +195,9 @@ export default function Console() {
           <section className="flex flex-col gap-2">
             <p className="hud-label text-ink-dim">Stored seeds</p>
             {seeds.length === 0 && (
-              <p className="text-ink-dim text-xs">No seeds stored yet.</p>
+              <p className="text-ink-dim text-xs">
+                No seeds stored yet. Upload a PDF to build the first one.
+              </p>
             )}
             <div className="flex flex-col gap-1">
               {seeds.map((seed) => (
@@ -284,11 +286,15 @@ export default function Console() {
           )}
 
           {error && (
-            <div
-              role="alert"
-              className="border border-line-strong px-3 py-2 text-[11px] leading-relaxed text-ink"
-            >
-              {error}
+            <div role="alert" className="error-box">
+              <p className="error-box-text">{error}</p>
+              <button
+                type="button"
+                className="error-box-dismiss"
+                onClick={() => setError(null)}
+              >
+                Dismiss
+              </button>
             </div>
           )}
         </aside>
@@ -308,6 +314,10 @@ export default function Console() {
               <p className="text-ink-dim max-w-sm text-xs leading-relaxed">
                 Pick a stored seed on the left, or upload a PDF and run the
                 pipeline to build the graph.
+              </p>
+              <p className="text-ink-dim max-w-sm text-[10px] leading-relaxed">
+                A run clears both stores first, then chunks and writes only the
+                new seed.
               </p>
             </div>
           )}
