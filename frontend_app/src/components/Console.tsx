@@ -64,6 +64,11 @@ export default function Console() {
     [agents],
   );
 
+  const promotedCount = useMemo(
+    () => agents.filter((agent) => agent.status === "promoted").length,
+    [agents],
+  );
+
   async function loadGraph(seedId: string) {
     setSelection(null);
     setFocusNodeId(null);
@@ -159,9 +164,30 @@ export default function Console() {
           />
           <h1 className="display text-lg">Knowledge Base Console</h1>
         </div>
-        <p className="hud-label text-ink-dim">
-          Chunks {"\u2192"} Qdrant {"\u00B7"} Entities {"\u2192"} Neo4j
-        </p>
+        {graph ? (
+          <dl className="stat-row" aria-label="Graph stats">
+            <div className="stat">
+              <dt className="hud-label text-ink-dim">entities</dt>
+              <dd>{graph.nodes.length}</dd>
+            </div>
+            <div className="stat">
+              <dt className="hud-label text-ink-dim">relationships</dt>
+              <dd>{graph.edges.length}</dd>
+            </div>
+            <div className="stat">
+              <dt className="hud-label text-ink-dim">agents</dt>
+              <dd>{agents.length}</dd>
+            </div>
+            <div className="stat">
+              <dt className="hud-label text-ink-dim">promoted</dt>
+              <dd>{promotedCount}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="hud-label text-ink-dim">
+            Chunks {"\u2192"} Qdrant {"\u00B7"} Entities {"\u2192"} Neo4j
+          </p>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
