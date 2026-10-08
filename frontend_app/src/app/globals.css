@@ -134,12 +134,17 @@ body {
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    transform 0.08s ease;
 }
 
 .btn:hover:not(:disabled) {
   border-color: var(--ink);
   background: rgba(245, 245, 245, 0.06);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -219,6 +224,11 @@ body {
 .field:focus {
   border-color: var(--ink);
   outline: none;
+}
+
+.field::placeholder {
+  color: var(--ink-dim);
+  opacity: 1;
 }
 
 /* ------------------------------------------------------------
@@ -482,6 +492,7 @@ body {
   text-align: left;
   color: var(--ink-dim);
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
 .agent-row-main:hover {
@@ -548,4 +559,32 @@ body {
 .archetype-option:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------
+   Slim scrollbars for the console's side panels, so the default
+   light scrollbar does not stand out against the dark paper.
+   ------------------------------------------------------------ */
+
+aside {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+aside::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+aside::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+aside::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+aside::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
 }
