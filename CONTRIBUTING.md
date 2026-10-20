@@ -80,6 +80,17 @@ of `services/Orchestration/nodes/*.py`; the graph wiring itself is the small
 - Keep comments explaining *why*, not *what*. The existing code does this
   heavily; match the tone rather than adding narration.
 
+For console changes, run the checks from its own directory:
+
+```bash
+cd frontend_app
+npm run lint
+npm run build
+```
+
+For marketing-site changes, run the same commands from `frontend/`. Each app
+has its own dependencies and configuration; checking one does not check the other.
+
 ## Tests
 
 `pytest` and `pytest-asyncio` are configured (`pythonpath = ["."]` in
