@@ -143,6 +143,17 @@ both stores. Note the API has no auth on that route, so keep it local.
 
 ## API at a glance
 
+With the orchestration API running, check that it responds before uploading a PDF:
+
+```bash
+curl --fail http://localhost:8000/
+curl --fail http://localhost:8000/seeds
+```
+
+The first request returns a liveness message; the second lists stored seeds.
+Neither request starts a pipeline run. Interactive API documentation is at
+`http://localhost:8000/docs`.
+
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/seed` | Upload a seed PDF and run the whole pipeline |
