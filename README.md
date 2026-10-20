@@ -128,8 +128,13 @@ when done. It is not the marketing site.
 ```bash
 cd frontend_app
 npm install
+cp .env.example .env.local
 npm run dev          # http://localhost:3000 (or the next free port)
 ```
+
+The console reads `NEXT_PUBLIC_API_BASE` from `.env.local`, defaulting to
+`http://localhost:8000`. Change it if the API uses a different port, then restart
+the dev server. This value is public in the browser; it must not contain secrets.
 
 Run the API alongside it (`uvicorn ... --port 8000`); CORS is allowed for any
 local port. Viewing a stored seed is read-only; a run wipes Qdrant and Neo4j and
