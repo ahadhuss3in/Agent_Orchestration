@@ -23,6 +23,14 @@ Run the API:
 uv run uvicorn services.Orchestration.main:app --reload
 ```
 
+If you also run the RAG health service, give it a separate port so the two
+Uvicorn processes do not compete for port 8000:
+
+```bash
+uv run uvicorn services.Rag.main:app --reload --port 8001
+curl --fail http://localhost:8001/health
+```
+
 ## Where things live
 
 ```
